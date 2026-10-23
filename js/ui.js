@@ -334,8 +334,29 @@
     new MutationObserver(() => pasangMata()).observe(document.documentElement, { childList: true, subtree: true });
   }
 
+  /** Muat SheetJS sekali (dipakai impor & unduh Excel). */
+  function muatXLSX() {
+    if (window.XLSX) return Promise.resolve();
+    return new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload = () => res(); s.onerror = () => rej(new Error('Gagal memuat pengolah Excel. Periksa koneksi internet.'));
+      document.head.appendChild(s);
+    });
+  }
+  /** Unduh array-of-arrays sebagai .xlsx (baris pertama = judul kolom). */
+  async function unduhXLSX(namaFile, namaSheet, aoa, lebar) {
+    await muatXLSX();
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = (lebar || aoa[0].map(h => Math.max(10, Math.min(45, String(h).length + 4)))).map(w => ({ wch: w }));
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(0, aoa.length - 1), c: aoa[0].length - 1 } }) };
+    XLSX.utils.book_append_sheet(wb, ws, namaSheet.slice(0, 31));
+    XLSX.writeFile(wb, namaFile);
+  }
+
   window.UI = {
-    temaAktif, gantiTema, pasangMata,
+    temaAktif, gantiTema, pasangMata, muatXLSX, unduhXLSX,
     ic, esc, fmtTgl, fmtWaktu, tambahBulan, hariKe, relatifBulan, tahapPengingat, semesterAktif, inisial, angka, ukuran,
     STATUS, badge, JAB, jab, jenjang, meterKel, avatar, identitas, person, motif, logo, lambang, toast, modal, konfirmasi, sibuk,
     base64KeBlob, unduhBlob, fileKeBase64, salin, debounce, simpanLokal, bacaLokal, empty, skeleton, pager

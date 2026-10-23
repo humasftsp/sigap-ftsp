@@ -491,19 +491,24 @@
     V().innerHTML = h;
     V().querySelectorAll('[data-t]').forEach(b => b.onclick = () => { PG.tab = b.dataset.t; renderPengaturan(); });
     const el = V().querySelector('#pg');
-    const jabSel = (val, cls) => '<select class="input ' + cls + '">' + ['TP', 'ASA', 'L', 'LK', 'GB'].map(j => '<option value="' + j + '" ' + (val === j ? 'selected' : '') + '>' + j + ' — ' + UI.jab(j) + '</option>').join('') + '</select>';
+    const jabSel = (val, cls) => '<select class="input ' + cls + '">' + ['TP', 'ASA', 'L', 'LK', 'GB'].map(j => '<option value="' + j + '" title="' + UI.jab(j) + '" ' + (val === j ? 'selected' : '') + '>' + j + '</option>').join('') + '</select>';
 
     if (PG.tab === 'aturan') {
+      const benar = v => v === true || String(v).toUpperCase() === 'TRUE';
       const baris = a => '<tr><td>' + jabSel(a.dari, 'a-dari') + '</td><td>' + jabSel(a.ke, 'a-ke') + '</td><td><input class="input a-masa" type="number" min="0" max="240" value="' + esc(a.masa_min_bulan) + '"></td>' +
         '<td><input class="input a-bkd" type="number" min="0" max="20" value="' + esc(a.bkd_min_semester) + '"></td><td><select class="input a-pend">' + [['', 'Tidak ada'], ['S2', 'S2'], ['S3', 'S3']].map(o => '<option value="' + o[0] + '" ' + (String(a.pendidikan_min || '') === o[0] ? 'selected' : '') + '>' + o[1] + '</option>').join('') + '</select></td>' +
-        '<td class="ctr"><input type="checkbox" class="a-aktif" ' + (String(a.aktif) === 'TRUE' || a.aktif === true ? 'checked' : '') + '></td><td><button class="btn btn-ghost btn-xs" data-rm>' + ic('trash', 14) + '</button></td></tr>';
-      el.innerHTML = '<div class="card"><div class="card-head"><div><h3>Aturan transisi jabatan (tab ATURAN)</h3><div class="sub">Bawaan: masa 24 bulan; BKD TP→ASA 2 semester, lainnya 4; S3 wajib untuk L→LK dan LK→GB.</div></div><button class="btn btn-soft btn-sm" data-addrow>' + ic('plus', 14) + 'Tambah baris</button></div>' +
-        '<div class="card-body"><div class="table-wrap"><table class="tbl etbl"><thead><tr><th>Dari</th><th>Ke</th><th>Masa min (bln)</th><th>BKD min (smt)</th><th>Pendidikan min</th><th class="ctr">Aktif</th><th></th></tr></thead><tbody id="rows">' +
+        '<td class="ctr"><input type="checkbox" class="a-skp" title="SKP minimal Baik 2 tahun terakhir" ' + (benar(a.syarat_skp) ? 'checked' : '') + '></td>' +
+        '<td><input class="input a-ak" type="number" min="0" max="100" placeholder="—" title="Minimal % AK penelitian dari kekurangan AK (kosong = tidak disyaratkan)" value="' + esc(a.syarat_ak_penelitian || '') + '" style="width:76px"></td>' +
+        '<td class="ctr"><input type="checkbox" class="a-pub" title="1 publikasi memenuhi (SINTA 4+ / Scopus Q4+)" ' + (benar(a.syarat_publikasi) ? 'checked' : '') + '></td>' +
+        '<td class="ctr"><input type="checkbox" class="a-elk" title="Pengisian Elkite Tri Dharma" ' + (benar(a.syarat_elkite) ? 'checked' : '') + '></td>' +
+        '<td class="ctr"><input type="checkbox" class="a-aktif" ' + (benar(a.aktif) ? 'checked' : '') + '></td><td><button class="btn btn-ghost btn-xs" data-rm>' + ic('trash', 14) + '</button></td></tr>';
+      el.innerHTML = '<div class="card"><div class="card-head"><div><h3>Aturan transisi jabatan (tab ATURAN)</h3><div class="sub">Bawaan: masa 24 bulan; BKD TP→ASA 2 semester, lainnya 4; S3 wajib untuk L→LK dan LK→GB. Syarat khusus (SKP, AK penelitian, publikasi, Elkite) bawaan aktif untuk ASA→L.</div></div><button class="btn btn-soft btn-sm" data-addrow>' + ic('plus', 14) + 'Tambah baris</button></div>' +
+        '<div class="card-body"><div class="table-wrap"><table class="tbl etbl"><thead><tr><th>Dari</th><th>Ke</th><th>Masa min (bln)</th><th>BKD min (smt)</th><th>Pendidikan min</th><th class="ctr">SKP</th><th>AK penelitian %</th><th class="ctr">Publikasi</th><th class="ctr">Elkite</th><th class="ctr">Aktif</th><th></th></tr></thead><tbody id="rows">' +
         d.aturan.map(baris).join('') + '</tbody></table></div><div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-primary" data-save>Simpan aturan</button></div></div></div>';
       el.querySelector('[data-addrow]').onclick = () => { el.querySelector('#rows').insertAdjacentHTML('beforeend', baris({ dari: 'TP', ke: 'ASA', masa_min_bulan: 24, bkd_min_semester: 4, pendidikan_min: '', aktif: true })); bindRm(); };
       const bindRm = () => el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => b.closest('tr').remove());
       bindRm();
-      el.querySelector('[data-save]').onclick = e => simpanBagian(e.target, 'aturan', { rows: [...el.querySelectorAll('#rows tr')].map(tr => ({ dari: tr.querySelector('.a-dari').value, ke: tr.querySelector('.a-ke').value, masa_min_bulan: tr.querySelector('.a-masa').value, bkd_min_semester: tr.querySelector('.a-bkd').value, pendidikan_min: tr.querySelector('.a-pend').value, aktif: tr.querySelector('.a-aktif').checked })) });
+      el.querySelector('[data-save]').onclick = e => simpanBagian(e.target, 'aturan', { rows: [...el.querySelectorAll('#rows tr')].map(tr => ({ dari: tr.querySelector('.a-dari').value, ke: tr.querySelector('.a-ke').value, masa_min_bulan: tr.querySelector('.a-masa').value, bkd_min_semester: tr.querySelector('.a-bkd').value, pendidikan_min: tr.querySelector('.a-pend').value, syarat_skp: tr.querySelector('.a-skp').checked, syarat_ak_penelitian: tr.querySelector('.a-ak').value, syarat_publikasi: tr.querySelector('.a-pub').checked, syarat_elkite: tr.querySelector('.a-elk').checked, aktif: tr.querySelector('.a-aktif').checked })) });
     }
     if (PG.tab === 'pensiun') {
       el.innerHTML = '<div class="card"><div class="card-head"><div><h3>Usia pensiun per jabatan (tab PENSIUN_ATURAN)</h3><div class="sub">Nilai ini diisi admin. Kosongkan bila belum ditetapkan — dosen dengan jabatan tersebut tidak dihitung tanggal pensiunnya.</div></div></div>' +

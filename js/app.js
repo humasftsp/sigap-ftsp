@@ -9,6 +9,13 @@
   const ROLE_LABEL = { ADMIN: 'Admin Fakultas', DOSEN: 'Dosen', PIMPINAN: 'Pimpinan Fakultas', KAPRODI: 'Kaprodi', SEKPRODI: 'Sekprodi', DEKAN: 'Dekan', WAKIL_DEKAN: 'Wakil Dekan', LAINNYA: 'Jabatan lain',
     WD1: 'Wakil Dekan I', WD2: 'Wakil Dekan II', WD3: 'Wakil Dekan III', WD4: 'Wakil Dekan IV' };
   const PIMPINAN = ['ADMIN', 'PIMPINAN', 'DEKAN', 'WAKIL_DEKAN', 'KAPRODI', 'SEKPRODI'];
+  /** Versi backend minimum yang dibutuhkan frontend ini. Bila backend lebih lama, admin diberi peringatan. */
+  const VERSI_FRONTEND = '1.3.2';
+  function versiLebihLama(a, b) {
+    const x = String(a || '0').split('.').map(Number), y = String(b).split('.').map(Number);
+    for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0); }
+    return false;
+  }
 
   const App = {
     boot: null,
@@ -86,6 +93,7 @@
       { id: 'dashboard', label: 'Dashboard', icon: 'grid' },
       punyaData && !pimp ? { id: 'dosen/' + u.id_dosen, match: 'dosen-saya', label: 'Profil Saya', icon: 'user' } : null,
       !pimp ? { id: 'berkas', label: 'Berkas Saya', icon: 'folder' } : null,
+      !pimp ? { id: 'templat', label: 'Templat & Contoh', icon: 'file' } : null,
       pimp ? { grup: 'dosen', label: 'Dosen & Jabamik', icon: 'users', items: [
         { id: 'dosen', label: 'Katalog Dosen', icon: 'users' },
         { id: 'jabamik', label: 'Kelayakan Jabamik', icon: 'award', count: 'pendek' },
@@ -101,9 +109,9 @@
         { id: 'organisasi/struktural', match: 'organisasi/struktural', label: 'Jabatan Struktural', icon: 'award' },
         { id: 'organisasi/override', match: 'organisasi/override', label: 'Override Peran', icon: 'shield' }
       ] } : null,
-      { grup: 'laporan', label: 'Laporan', icon: 'printer', items: [
+      { grup: 'laporan', label: 'Laporan & Templat', icon: 'printer', items: [
         { id: 'cetak', label: 'Cetak & Rekap', icon: 'printer' }
-      ] },
+      ].concat(pimp ? [{ id: 'templat', label: 'Templat & Contoh', icon: 'file' }] : []) },
       admin ? { grup: 'admin', label: 'Administrasi', icon: 'sliders', items: [
         { id: 'impor', label: 'Tambah / Impor', icon: 'upload' },
         { id: 'akun', label: 'Pengguna & Akun', icon: 'key' },
@@ -154,13 +162,14 @@
       '<button class="btn btn-ghost btn-icon menu-btn" data-drawer aria-label="Buka menu">' + ic('menu', 22) + '</button>' +
       '<a href="#/dashboard" class="brandmark tb-brand" style="color:var(--navy);text-decoration:none">' + UI.lambang('navy') + '<div><div class="t1">SIGAP FTSP</div><div class="t2" style="color:var(--blue)">UNIVERSITAS TRISAKTI</div></div></a>' +
       (!dosenSaja ? '<div class="input-icon hide-sm" style="width:min(380px,32vw)">' + ic('search', 17) + '<input class="input" id="global-q" placeholder="Cari nama dosen, NIDN, atau NUPTK…" style="height:38px;background:var(--surface-2)"></div>' : '') +
-      '<span class="chip chip-blue hide-sm">' + ic('calendar', 14) + 'Semester ' + esc(UI.semesterAktif(today)) + '</span>' +
       '<div class="spacer"></div>' +
       '<span class="chip chip-green hide-sm" id="chip-pemicu" title="Pemicu harian otomatis">' + '<span class="dot"></span>Pemicu 07.00 WIB</span>' +
       '<button class="btn btn-ghost btn-icon" data-tema title="Mode gelap/terang" aria-label="Ganti mode gelap/terang">' + ic(UI.temaAktif() === 'dark' ? 'sun' : 'moon', 18) + '</button>' +
       '<button class="btn btn-ghost btn-icon" data-refresh title="Muat ulang data" aria-label="Muat ulang data">' + ic('refresh', 18) + '</button>' +
       '<a class="avatar sm" href="#/profil" title="Profil" style="text-decoration:none;background:var(--navy-bg);color:#fff;border-color:var(--navy-bg)">' + esc(UI.inisial(u.nama)) + '</a>' +
       '</header>' +
+      (App.isAdmin() && App.boot && versiLebihLama(App.boot.app && App.boot.app.versi, VERSI_FRONTEND) ? '<div class="banner-contoh" style="background:var(--inc-bg);color:var(--inc-tx);border-color:var(--inc-bd)">' + ic('alert', 15) +
+        '<span><b>Backend belum diperbarui.</b> Tampilan ini versi ' + VERSI_FRONTEND + ', tetapi backend (Apps Script) yang aktif masih versi ' + esc((App.boot.app && App.boot.app.versi) || '?') + '. Beberapa fitur akan gagal (mis. "Jabatan struktural tidak valid"). Tempel file .gs terbaru lalu Deploy → Manage deployments → Edit → <b>New version</b>.</span></div>' : '') +
       (u.akun_contoh ? '<div class="banner-contoh">' + ic('info', 15) + '<span><b>Akun contoh.</b> Data di akun ini fiktif dan tidak dihitung di dashboard, laporan, maupun email.</span></div>' : '') +
       '<main class="content" id="view" tabindex="-1"></main>' +
       '<footer class="footer"><span>Universitas Trisakti — Fakultas Teknik Sipil dan Perencanaan · <a href="#" data-privasi>Pemberitahuan privasi</a></span><span>SIGAP v' + esc((App.boot && App.boot.app && App.boot.app.versi) || '1.3') + ' · Data per ' + UI.fmtTgl(today, true) + '</span></footer>' +
@@ -187,7 +196,8 @@
       }
     });
     const gq = document.getElementById('global-q');
-    if (gq) gq.addEventListener('keydown', e => { if (e.key === 'Enter') { App.go('#/dosen?q=' + encodeURIComponent(gq.value.trim())); gq.blur(); } });
+    // Kata kunci langsung dibawa ke Katalog Dosen lalu kotak pencarian dikosongkan kembali
+    if (gq) gq.addEventListener('keydown', e => { if (e.key === 'Enter') { const v = gq.value.trim(); gq.value = ''; gq.blur(); App.go('#/dosen?q=' + encodeURIComponent(v)); } });
     perbaruiChipPemicu();
   }
 
@@ -245,7 +255,7 @@
   }
 
   const AKSES = {
-    dashboard: null, dosen: null, berkas: null, cetak: null, profil: null,
+    dashboard: null, dosen: null, berkas: null, cetak: null, profil: null, templat: null,
     jabamik: PIMPINAN, pensiun: PIMPINAN, impor: ['ADMIN'], akun: ['ADMIN'], pengaturan: ['ADMIN'], log: ['ADMIN'], organisasi: ['ADMIN']
   };
 
@@ -297,7 +307,7 @@
       '<div class="field"><label for="l-pw">Password</label><div class="pw-wrap"><input class="input" id="l-pw" type="password" autocomplete="current-password" placeholder="••••••••" required>' +
       '<button type="button" data-toggle-pw aria-label="Tampilkan password">' + ic('eye', 18) + '</button></div></div>' +
       '<button class="btn btn-primary" type="submit" id="btn-login">Masuk</button>' +
-      '<div class="help">Lupa password atau akun terkunci? Hubungi admin kepegawaian FTSP untuk reset.</div>' +
+      '<div class="help">Lupa password atau akun terkunci? Hubungi admin SIGAP untuk reset.</div>' +
       '</form></section></div>';
 
     const f = document.getElementById('f-login');
@@ -374,7 +384,6 @@
     const teks = (App.boot && App.boot.teks_privasi) || [];
     document.getElementById('app').innerHTML =
       '<div class="login-wrap">' + UI.motif(0.09, 'gelombang') + '<section class="login-panel" style="grid-column:1/-1"><form class="login-card" id="f-privasi" style="max-width:620px" novalidate>' +
-      '<div class="badge b-blue" style="margin-bottom:10px">' + ic('shieldCheck', 12) + 'Versi ' + esc((App.boot && App.boot.cfg && App.boot.cfg.VERSI_PRIVASI) || '1') + '</div>' +
       '<h2>Pemberitahuan Privasi</h2><div class="sub">Mohon baca sebelum menggunakan SIGAP FTSP.</div>' +
       '<div class="privasi-teks">' + teks.map(t => '<p>' + esc(t) + '</p>').join('') + '</div>' +
       '<label class="check" style="margin:14px 0 18px;align-items:flex-start"><input type="checkbox" id="pv-ok" style="margin-top:2px"><span>Saya telah membaca dan menyetujui pemrosesan data sesuai pemberitahuan ini.</span></label>' +
@@ -397,7 +406,7 @@
 
   function tampilPrivasi() {
     const teks = (App.boot && App.boot.teks_privasi) || [];
-    UI.modal({ title: 'Pemberitahuan Privasi', sub: 'Versi ' + esc(App.boot.cfg.VERSI_PRIVASI || '1'), body: '<div class="privasi-teks" style="max-height:none">' + teks.map(t => '<p>' + esc(t) + '</p>').join('') + '</div>' });
+    UI.modal({ title: 'Pemberitahuan Privasi', body: '<div class="privasi-teks" style="max-height:none">' + teks.map(t => '<p>' + esc(t) + '</p>').join('') + '</div>' });
   }
 
   async function masuk() {

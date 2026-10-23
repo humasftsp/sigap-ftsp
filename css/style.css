@@ -595,7 +595,7 @@ table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size
   .form-grid, .dl, .map-grid, .rules { grid-template-columns: minmax(0, 1fr); }
   .dproj { grid-template-columns: minmax(0, 1fr); }
   .toolbar { padding: 12px; }
-  .toolbar select.input { flex: 1; min-width: 0; }
+  .toolbar select.input { flex: 1 1 calc(50% - 5px); min-width: 0; }
   .toolbar .grow { flex-basis: 100%; }
   .login-wrap { grid-template-columns: minmax(0, 1fr); }
   .login-brand { padding: 28px 22px 8px; }
@@ -680,3 +680,13 @@ table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size
 :root[data-theme="dark"] .alert-box.blue { color: var(--ink); }
 :root[data-theme="dark"] .tag { color: var(--navy); }
 :root[data-theme="dark"] img.lambang[src*="navy"] { filter: brightness(0) invert(1); }
+
+/* Katalog per jurusan */
+.jur-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+.jur-tabs button { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); padding: 9px 14px; border-radius: var(--r); font-weight: 600; font-size: 13.5px; cursor: pointer; }
+.jur-tabs button:hover { border-color: var(--navy); color: var(--navy); }
+.jur-tabs button.on { background: var(--navy-bg); border-color: var(--navy-bg); color: #fff; }
+.jur-tabs .n { background: var(--hover); color: var(--ink-2); border-radius: 999px; padding: 1px 8px; font-size: 12px; }
+.jur-tabs button.on .n { background: rgba(255,255,255,.18); color: #fff; }
+
+@media (max-width: 767px) { .g-stack { grid-template-columns: minmax(0, 1fr) !important; } .jur-tabs button { flex: 1 1 auto; justify-content: center; } }

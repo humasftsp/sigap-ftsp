@@ -177,7 +177,7 @@
       '<div class="dproj" style="margin-top:0;margin-bottom:16px"><div><div class="l">Jabatan Akademik</div><div class="v">' + esc(st.jabatan_label) + '</div><div class="s">' + (st.acuan_tmt === 'TMT Karyawan Tetap' ? 'TMT Karyawan Tetap ' : 'TMT ') + fmtTgl(tmtAcuan(d)) + '</div></div>' +
       '<div><div class="l">Target berikutnya</div><div class="v">' + esc(st.target_label || '—') + '</div><div class="s">' + esc(d.status_pengusulan ? 'Pengusulan: ' + d.status_pengusulan : '') + '</div></div>' +
       '<div><div class="l">Eligible</div><div class="v">' + (st.tgl_eligible ? fmtTgl(st.tgl_eligible) : '—') + '</div><div class="s">' + (st.estimasi ? 'sebagian estimasi' : '') + '</div></div></div>' +
-      checklist(st) + '<p class="muted small" style="margin:14px 0 0">Data kepegawaian (jabatan, TMT, pendidikan, homebase) diubah oleh admin kepegawaian FTSP. Profil singkat, bidang keahlian, dan nomor WhatsApp dapat Anda ubah di <a href="#/dosen/' + esc(d.id_dosen) + '?tab=profil">Profil Saya</a>.</p></div></div>' +
+      checklist(st) + '<p class="muted small" style="margin:14px 0 0">Data kepegawaian (jabatan, TMT, pendidikan, homebase) diubah oleh admin SIGAP. Profil singkat, bidang keahlian, dan nomor WhatsApp dapat Anda ubah di <a href="#/dosen/' + esc(d.id_dosen) + '?tab=profil">Profil Saya</a>.</p></div></div>' +
       '<div class="card"><div class="card-head"><h3>' + ic('folder', 18) + 'Berkas saya</h3></div><div class="card-body">' + UI.meterKel(d.kelengkapan) +
       '<div style="margin-top:14px;display:grid;gap:8px">' + (App.boot.jenis_berkas || []).map(j => {
         const it = d.kelengkapan.item[j.kode] || {};
@@ -191,17 +191,18 @@
     if (st.status === 'BELUM_LENGKAP') return '<div class="alert-box standalone">' + ic('alert', 16) + '<div><b>Status belum dapat dihitung</b>' + esc((st.alasan || []).join('; ')) + '</div></div>';
     if (!st.syarat || !st.syarat.length) return '<div class="muted">Tidak ada syarat.</div>';
     return '<div class="checklist">' + st.syarat.map(s => '<div class="ck ' + (s.terpenuhi ? 'ok' : 'no') + '"><div class="ic">' + ic(s.terpenuhi ? 'check' : 'clock', 16) + '</div>' +
-      '<div><div class="t">' + esc(s.nama) + '</div><div class="s">' + esc(s.ket) + '</div></div><div class="d">' + (s.tanggal ? fmtTgl(s.tanggal) : (s.terpenuhi ? 'Terpenuhi' : 'Belum')) + '</div></div>').join('') + '</div>';
+      '<div><div class="t">' + esc(s.nama) + (s.khusus ? ' <span class="badge b-blue" style="margin-left:4px">Syarat khusus</span>' : '') + '</div><div class="s">' + esc(s.ket) + '</div></div><div class="d">' + (s.tanggal ? fmtTgl(s.tanggal) : (s.terpenuhi ? 'Terpenuhi' : 'Belum')) + '</div></div>').join('') + '</div>';
   }
 
   // ============================================================
   // KATALOG DOSEN
   // ============================================================
-  const KAT = { q: '', prodi: '', status: '', jab: '', kel: '', sd: '', sort: 'eligible', hal: 1, nonaktif: false };
+  const KAT = { q: '', jur: '', prodi: '', status: '', jab: '', kel: '', sd: '', sort: 'eligible', hal: 1, nonaktif: false };
 
   Pages.dosen = async function (param, q) {
     if (param) return detailDosen(param);
-    if (q && (q.status !== undefined || q.q !== undefined)) { Object.assign(KAT, { q: q.q || '', status: q.status || '', prodi: '', jab: '', kel: '', hal: 1 }); }
+    if (q && (q.status !== undefined || q.q !== undefined)) { Object.assign(KAT, { q: q.q || '', status: q.status || '', jur: '', prodi: '', jab: '', kel: '', hal: 1 }); }
+    else { KAT.q = ''; } // pencarian tidak menempel saat kembali dari menu lain
     KAT.view = UI.bacaLokal('view_dosen', window.innerWidth < 768 ? 'grid' : 'grid');
     V().innerHTML = UI.skeleton();
     await App.muatDosen();
@@ -213,6 +214,7 @@
     const q = KAT.q.toLowerCase();
     let l = (App.dosen || []).filter(d => KAT.nonaktif ? (App.dalamLingkup(d) || d.contoh) : (d.aktif && App.dalamLingkup(d)));
     if (q) l = l.filter(d => (d.nama + ' ' + d.nidn + ' ' + d.nuptk + ' ' + d.email).toLowerCase().indexOf(q) >= 0);
+    if (KAT.jur) l = l.filter(d => (d.kelompok_bidang || '') === KAT.jur);
     if (KAT.prodi === '__kosong') l = l.filter(d => !d.id_prodi_homebase);
     else if (KAT.prodi) l = l.filter(d => d.prodi === KAT.prodi);
     if (KAT.jab) l = l.filter(d => d.status.jabatan === KAT.jab);
@@ -243,13 +245,21 @@
     const prodiList = prodiTerlihat();
 
     let h = head('Direktori', 'Katalog & Progres Jabamik', (App.dosen || []).filter(d => d.aktif && App.dalamLingkup(d)).length + ' dosen aktif' + (App.lihatSemua() ? ' di FTSP' : ' di Prodi ' + esc(App.prodiPimpinan().join(', '))) + '. Klik kartu untuk detail, syarat, dan berkas.',
-      admin ? '<button class="btn btn-outline" data-act="impor">' + ic('upload', 16) + 'Impor Excel</button><button class="btn btn-primary" data-act="tambah">' + ic('plus', 16) + 'Tambah Dosen</button>' : '');
+      '<button class="btn btn-outline" data-act="unduh" ' + (list.length ? '' : 'disabled') + '>' + ic('download', 16) + 'Unduh Excel (' + list.length + ')</button>' + (admin ? '<button class="btn btn-primary" data-act="tambah">' + ic('plus', 16) + 'Tambah Dosen</button>' : ''));
+
+    // Pilihan jurusan (kelompok bidang): Teknik Sipil, Arsitektur, ... — S1 & S2 digabung
+    const jurList = [];
+    (App.boot.prodi_master || []).filter(p => p.aktif).forEach(p => { if (jurList.indexOf(p.kelompok_bidang) < 0) jurList.push(p.kelompok_bidang); });
+    const dasarJur = (App.dosen || []).filter(d => d.aktif && App.dalamLingkup(d));
+    const jurTampil = jurList.filter(j => dasarJur.some(d => d.kelompok_bidang === j));
+    if (jurTampil.length > 1) h += '<div class="jur-tabs">' + [['', 'Semua Jurusan', dasarJur.length]].concat(jurTampil.map(j => [j, j, dasarJur.filter(d => d.kelompok_bidang === j).length]))
+      .map(j => '<button class="' + (KAT.jur === j[0] ? 'on' : '') + '" data-jur="' + esc(j[0]) + '">' + ic(j[0] ? 'building' : 'grid', 16) + esc(j[1]) + '<span class="n">' + j[2] + '</span></button>').join('') + '</div>';
 
     h += '<div class="pills mb">' + [['', 'Semua', dasar.filter(d => d.aktif).length]].concat(URUT_STATUS.map(s => [s, STATUS[s].short, c[s]])).concat(admin && KAT.nonaktif ? [['NONAKTIF', 'Nonaktif', dasar.filter(d => !d.aktif).length]] : [])
       .map(p => '<button class="pill ' + (KAT.status === p[0] ? 'on' : '') + '" data-status="' + p[0] + '">' + (p[0] && p[0] !== 'NONAKTIF' ? '<span class="dot" style="color:var(--' + { SIAP: 'ready', PENDEK: 'short', PANJANG: 'long', BELUM_LENGKAP: 'inc', GB: 'gb' }[p[0]] + '-' + (p[0] === 'GB' ? 'tx' : 'solid') + ')"></span>' : '') + esc(p[1]) + '<span class="n">' + p[2] + '</span></button>').join('') + '</div>';
 
     h += '<div class="toolbar"><div class="input-icon grow">' + ic('search', 17) + '<input class="input" id="k-q" placeholder="Cari nama, NIDN, NUPTK, email…" value="' + esc(KAT.q) + '"></div>' +
-      (prodiList.length > 1 ? '<select class="input" id="k-prodi" aria-label="Homebase"><option value="">Semua homebase</option>' + prodiList.map(p => '<option ' + (KAT.prodi === p ? 'selected' : '') + '>' + esc(p) + '</option>').join('') + (App.lihatSemua() ? '<option value="__kosong" ' + (KAT.prodi === '__kosong' ? 'selected' : '') + '>Belum ditetapkan</option>' : '') + '</select>' : '') +
+      (prodiList.length > 1 ? '<select class="input" id="k-prodi" aria-label="Homebase"><option value="">Semua prodi' + (KAT.jur ? ' ' + esc(KAT.jur) : '') + '</option>' + prodiList.filter(p => !KAT.jur || (App.boot.prodi_master || []).some(m => m.label === p && m.kelompok_bidang === KAT.jur)).map(p => '<option ' + (KAT.prodi === p ? 'selected' : '') + '>' + esc(p) + '</option>').join('') + (App.lihatSemua() ? '<option value="__kosong" ' + (KAT.prodi === '__kosong' ? 'selected' : '') + '>Belum ditetapkan</option>' : '') + '</select>' : '') +
       '<select class="input" id="k-jab"><option value="">Semua jabatan</option>' + JAB_URUT.map(j => '<option value="' + j + '" ' + (KAT.jab === j ? 'selected' : '') + '>' + UI.jab(j) + '</option>').join('') + '</select>' +
       '<select class="input" id="k-sd" aria-label="Status dosen"><option value="">Semua status dosen</option>' + STATUS_DOSEN.map(x => '<option ' + (KAT.sd === x ? 'selected' : '') + '>' + x + '</option>').join('') + '</select>' +
       '<select class="input" id="k-kel"><option value="">Semua kelengkapan</option><option value="lengkap" ' + (KAT.kel === 'lengkap' ? 'selected' : '') + '>Berkas lengkap</option><option value="kurang" ' + (KAT.kel === 'kurang' ? 'selected' : '') + '>Berkas belum lengkap</option></select>' +
@@ -285,7 +295,28 @@
     V().querySelectorAll('[data-hal]').forEach(b => b.onclick = () => { KAT.hal = +b.dataset.hal; renderKatalog(); window.scrollTo(0, 0); });
     V().querySelectorAll('[data-href]').forEach(el => el.addEventListener('click', e => { if (!e.target.closest('a,button')) App.go(el.dataset.href); }));
     const t = V().querySelector('[data-act="tambah"]'); if (t) t.onclick = () => Pages.formDosen(null);
-    const im = V().querySelector('[data-act="impor"]'); if (im) im.onclick = () => App.go('#/impor');
+    V().querySelectorAll('[data-jur]').forEach(b => b.onclick = () => { KAT.jur = b.dataset.jur; KAT.prodi = ''; rerender(); });
+    const un = V().querySelector('[data-act="unduh"]'); if (un) un.onclick = e => UI.sibuk(e.currentTarget, () => unduhKatalog(list)).catch(() => { });
+  }
+
+  /** Unduh data katalog yang sedang tampil (sesuai filter) sebagai Excel. Data pribadi hanya untuk admin. */
+  async function unduhKatalog(list) {
+    const admin = App.isAdmin();
+    const kol = ['No', 'Nama', 'NIDN', 'NUPTK', 'Jurusan', 'Homebase', 'Status dosen', 'Jabatan saat ini', 'Jabatan akademik', 'TMT Jabamik', 'TMT Karyawan Tetap',
+      'Target jabatan', 'Tanggal eligible efektif', 'Status kelayakan', 'Alasan status', 'Syarat khusus terpenuhi', 'Status pengusulan', 'Kelengkapan berkas (%)']
+      .concat(admin ? ['Email', 'No. WhatsApp', 'Tanggal lahir'] : []);
+    const rows = list.map((d, i) => {
+      const st = d.status || {};
+      const kh = (st.syarat || []).filter(x => x.khusus);
+      return [i + 1, d.nama, d.nidn, d.nuptk, d.kelompok_bidang || '', d.prodi || 'Belum ditetapkan', d.status_dosen || 'Aktif', jabatanKini(d) || 'Dosen', st.jabatan_label || '',
+        d.tmt_jabamik || '', d.tmt_karyawan_tetap || '', st.target_label || '', st.tgl_eligible || '', d.aktif ? (STATUS[st.status] || {}).label || st.status : 'Nonaktif',
+        (st.alasan || []).join('; '), kh.length ? kh.filter(x => x.terpenuhi).length + '/' + kh.length : '—', d.status_pengusulan || 'Belum', d.kelengkapan ? d.kelengkapan.persen : '']
+        .concat(admin ? [d.email || '', d.no_wa || '', d.tgl_lahir || ''] : []);
+    });
+    const label = [KAT.jur, KAT.prodi === '__kosong' ? 'Belum ditetapkan' : KAT.prodi, KAT.status ? (STATUS[KAT.status] || {}).short : ''].filter(Boolean).join('-').replace(/[^\w-]+/g, '_');
+    await UI.unduhXLSX('Katalog-Dosen-SIGAP' + (label ? '-' + label : '') + '-' + App.hariIni() + '.xlsx', 'Katalog Dosen', [kol].concat(rows),
+      kol.map(k => ({ No: 5, Nama: 36, 'Alasan status': 50 })[k] || Math.max(12, k.length + 3)));
+    UI.toast(rows.length + ' baris diunduh');
   }
 
   function kartuDosen(d) {
@@ -313,7 +344,7 @@
   // ============================================================
   // DETAIL DOSEN
   // ============================================================
-  const TABS = [['syarat', 'Syarat & Status'], ['profil', 'Profil'], ['pendidikan', 'Pendidikan'], ['riwayat', 'Riwayat Jabatan'], ['homebase', 'Homebase & Struktural'], ['berkas', 'Berkas & Kelengkapan'], ['pengusulan', 'Pengusulan']];
+  const TABS = [['syarat', 'Syarat & Status'], ['khusus', 'Syarat Khusus'], ['profil', 'Profil'], ['pendidikan', 'Pendidikan'], ['riwayat', 'Riwayat Jabatan'], ['homebase', 'Homebase & Struktural'], ['berkas', 'Berkas & Kelengkapan'], ['pengusulan', 'Pengusulan']];
 
   async function detailDosen(id, tabAwal) {
     const q = (location.hash.split('?')[1] || '');
@@ -376,6 +407,7 @@
         ['S3 — Universitas', d.s3_univ], ['S3 — Lulus', d.s3_lulus], ['Tugas belajar — mulai', d.tb_mulai], ['Tugas belajar — selesai', d.tb_selesai]
       ].map(x => '<div><dt>' + x[0] + '</dt><dd>' + (/^\d{4}-\d{2}-\d{2}$/.test(x[1]) ? fmtTgl(x[1]) : esc(x[1] || '—')) + '</dd></div>').join('') + '</dl></div>';
       if (t === 'riwayat') renderRiwayat(el, d);
+      if (t === 'khusus') renderSyaratKhusus(el, d, () => { App.invalidasi(); detailDosen(id, 'khusus'); });
       if (t === 'homebase') Pages.renderHomebaseDosen(el, d, () => { App.invalidasi(); detailDosen(id, 'homebase'); });
       if (t === 'berkas') { el.innerHTML = '<div class="card card-pad"><div style="margin-bottom:14px">' + UI.meterKel(d.kelengkapan) + '</div><div id="blist"></div></div>'; Pages.renderBerkasDosen(el.querySelector('#blist'), d, bisaBuka, () => detailDosen(id, 'berkas')); }
       if (t === 'pengusulan') renderPengusulan(el, d);
@@ -394,6 +426,205 @@
       };
     }
   }
+
+  // ============================================================
+  // SYARAT KHUSUS: SKP, AK penelitian SISTER, publikasi, Elkite
+  // ============================================================
+  function bukti(b, idRef, jenis, label, boleh) {
+    if (b && b.ada && b.id_berkas) return '<button class="btn btn-ghost btn-xs" data-bukti-lihat="' + esc(b.id_berkas) + '" title="' + esc(b.nama_file || '') + '">' + ic('eye', 14) + label + '</button>' +
+      (boleh ? '<button class="btn btn-ghost btn-xs" data-bukti-up="' + esc(idRef) + '|' + jenis + '" title="Ganti">' + ic('upload', 13) + '</button>' : '');
+    if (b && b.ada) return '<span class="badge b-ready">' + ic('check', 12) + label + '</span>';
+    return boleh ? '<button class="btn btn-soft btn-xs" data-bukti-up="' + esc(idRef) + '|' + jenis + '">' + ic('upload', 13) + 'Unggah ' + (label === 'SKP' ? label : label.toLowerCase()) + '</button>' : '<span class="badge b-short">' + ic('alert', 12) + label + ' belum ada</span>';
+  }
+
+  function renderSyaratKhusus(el, d, onUbah) {
+    const sk = d.syarat_khusus || { skp: [], publikasi: [], boleh_ubah: false };
+    const boleh = sk.boleh_ubah;
+    const st = d.status;
+    const khusus = (st.syarat || []).filter(x => x.khusus);
+    const tahun = +App.hariIni().slice(0, 4);
+    const piliran = (App.boot.pilihan || {});
+    let h = '';
+    if (!khusus.length) h += '<div class="alert-box blue standalone">' + ic('info', 16) + '<div><b>Tidak ada syarat khusus untuk jenjang berikutnya</b>Syarat khusus diatur per transisi jabatan di Pengaturan → Aturan kenaikan (bawaan: Asisten Ahli → Lektor). Data di bawah tetap dapat diisi untuk dokumentasi.</div></div>';
+    else h += '<div class="card card-pad mb"><div class="lbl" style="margin-bottom:10px">SYARAT KHUSUS ' + esc(st.jabatan_label) + ' → ' + esc(st.target_label) + '</div><div class="checklist">' +
+      khusus.map(s => '<div class="ck ' + (s.terpenuhi ? 'ok' : 'no') + '"><div class="ic">' + ic(s.terpenuhi ? 'check' : 'clock', 16) + '</div><div><div class="t">' + esc(s.nama) + '</div><div class="s">' + esc(s.ket) + '</div></div><div class="d">' + (s.terpenuhi ? 'Terpenuhi' : 'Belum') + '</div></div>').join('') + '</div></div>';
+
+    // SKP
+    h += '<div class="grid g-2 g-stack mb" style="align-items:start"><div class="card"><div class="card-head"><div><h3>' + ic('award', 18) + 'Predikat Kinerja (SKP)</h3><div class="sub">Minimal "Baik" berturut-turut ' + (tahun - 2) + ' & ' + (tahun - 1) + '</div></div>' +
+      (boleh ? '<button class="btn btn-soft btn-sm" data-skp-add>' + ic('plus', 14) + 'Tambah SKP</button>' : '') + '</div><div class="card-body">' +
+      (sk.skp.length ? '<div class="table-wrap"><table class="tbl"><thead><tr><th>Tahun</th><th>Predikat</th><th>Bukti</th><th></th></tr></thead><tbody>' + sk.skp.map(x =>
+        '<tr><td><b>' + esc(x.tahun) + '</b></td><td><span class="badge ' + (/^(Sangat Baik|Baik)$/.test(x.predikat) ? 'b-ready' : 'b-inc') + '">' + esc(x.predikat) + '</span>' + (x.catatan ? '<div class="small muted">' + esc(x.catatan) + '</div>' : '') + '</td>' +
+        '<td class="nowrap">' + bukti(x.berkas, x.id_skp, 'SKP', 'SKP', boleh) + '</td><td class="num nowrap">' + (boleh ? '<button class="btn btn-ghost btn-xs" data-skp-edit="' + esc(x.id_skp) + '">' + ic('edit', 13) + '</button><button class="btn btn-ghost btn-xs" data-skp-del="' + esc(x.id_skp) + '">' + ic('trash', 13) + '</button>' : '') + '</td></tr>').join('') + '</tbody></table></div>'
+        : '<div class="muted">Belum ada SKP tercatat.</div>') + '</div></div>';
+
+    // AK SISTER & Elkite
+    h += '<div class="card"><div class="card-head"><div><h3>' + ic('trend', 18) + 'Angka Kredit (SISTER) & Elkite</h3><div class="sub">Diisi sesuai data terakhir di SISTER</div></div>' +
+      (boleh ? '<button class="btn btn-soft btn-sm" data-ak>' + ic('edit', 14) + 'Ubah</button>' : '') + '</div><div class="card-body"><dl class="dl">' +
+      '<div><dt>Kekurangan AK ke jenjang berikutnya</dt><dd>' + esc(sk.ak_kekurangan || '—') + '</dd></div><div><dt>AK penelitian</dt><dd>' + esc(sk.ak_penelitian || '—') +
+      (sk.ak_kekurangan && sk.ak_penelitian && +sk.ak_kekurangan > 0 ? ' <span class="muted small">(' + (Math.round(+sk.ak_penelitian * 1000 / +sk.ak_kekurangan) / 10).toString().replace('.', ',') + '%)</span>' : '') + '</dd></div>' +
+      '<div><dt>Data SISTER per</dt><dd>' + fmtTgl(sk.ak_tgl_data) + '</dd></div><div><dt>Elkite Tri Dharma</dt><dd>' + (sk.elkite_status === 'Sudah' ? '<span class="badge b-ready">' + ic('check', 12) + 'Sudah diisi</span> <span class="small muted">' + fmtTgl(sk.elkite_tgl) + '</span>' : '<span class="badge b-short">Belum diisi</span>') + '</dd></div></dl></div></div></div>';
+
+    // Publikasi
+    h += '<div class="card"><div class="card-head"><div><h3>' + ic('file', 18) + 'Publikasi Ilmiah</h3><div class="sub">Minimal 1 artikel yang memenuhi syarat</div></div>' +
+      (boleh ? '<button class="btn btn-soft btn-sm" data-pub-add>' + ic('plus', 14) + 'Tambah publikasi</button>' : '') + '</div><div class="card-body">' +
+      (sk.publikasi.length ? sk.publikasi.map(x => '<div class="litem"><div class="row"><div class="t">' + esc(x.judul) + '</div>' + (x.memenuhi ? '<span class="badge b-ready">' + ic('check', 12) + 'Memenuhi</span>' : '<span class="badge b-gray" title="' + esc(x.alasan) + '">Tidak memenuhi</span>') + '</div>' +
+        '<div class="s">' + esc([x.jenis_publikasi, x.nama_jurnal, x.peringkat_jurnal, x.sjr ? 'SJR ' + x.sjr.replace('.', ',') : '', x.impact_factor ? 'IF ' + x.impact_factor.replace('.', ',') : '', x.status_jurnal !== 'Aktif' ? x.status_jurnal : '', x.tgl_terbit ? fmtTgl(x.tgl_terbit) : ''].filter(Boolean).join(' · ')) + '</div>' +
+        (!x.memenuhi && x.alasan ? '<div class="s" style="color:var(--short-tx)">' + esc(x.alasan) + '</div>' : '') +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center">' + bukti(x.berkas.ARTIKEL, x.id_kegiatan, 'ARTIKEL', 'Artikel', boleh) + bukti(x.berkas.KORESPONDENSI, x.id_kegiatan, 'KORESPONDENSI', 'Korespondensi', boleh) +
+        (x.tautan ? '<a class="btn btn-ghost btn-xs" href="' + esc(x.tautan) + '" target="_blank" rel="noopener">' + ic('arrowR', 13) + 'Tautan</a>' : '') +
+        (boleh ? '<span style="flex:1"></span><button class="btn btn-ghost btn-xs" data-pub-edit="' + esc(x.id_kegiatan) + '">' + ic('edit', 13) + 'Ubah</button><button class="btn btn-ghost btn-xs" data-pub-del="' + esc(x.id_kegiatan) + '">' + ic('trash', 13) + '</button>' : '') + '</div></div>').join('')
+        : '<div class="muted">Belum ada publikasi tercatat.</div>') +
+      '<p class="muted small" style="margin:12px 0 0">' + ic('info', 13) + ' Memenuhi bila jurnal nasional terakreditasi min. SINTA 4, atau jurnal internasional terindeks Scopus Q1–Q4 dengan SJR &gt; 0,1 atau IF &gt; 0,05 dan status jurnal tidak cancelled/discontinued.</p>' +
+      '<p class="muted small" style="margin:6px 0 0">' + ic('file', 13) + ' Contoh SKP dan contoh bukti korespondensi author tersedia di menu <a href="#/templat">Templat & Contoh</a>.</p></div></div>' +
+      '<input type="file" accept="application/pdf,image/jpeg,image/png" class="hide" id="bukti-file">';
+    el.innerHTML = h;
+
+    // --- aksi ---
+    const inp = el.querySelector('#bukti-file');
+    let target = null;
+    el.querySelectorAll('[data-bukti-up]').forEach(b => b.onclick = () => { target = { btn: b, ref: b.dataset.buktiUp.split('|') }; inp.value = ''; inp.click(); });
+    inp.onchange = async () => {
+      const f = inp.files[0]; if (!f || !target) return;
+      const mime = f.type || (/\.pdf$/i.test(f.name) ? 'application/pdf' : '');
+      if (['application/pdf', 'image/jpeg', 'image/png'].indexOf(mime) < 0) return UI.toast('Format harus PDF, JPG, atau PNG', 'err');
+      if (f.size > 5 * 1024 * 1024) return UI.toast('Ukuran berkas melebihi 5 MB', 'err');
+      try {
+        const r = await UI.sibuk(target.btn, async () => API.call('uploadBukti', { id_ref: target.ref[0], jenis: target.ref[1], mime, nama_asli: f.name, base64: await UI.fileKeBase64(f) }));
+        UI.toast(r.message); onUbah();
+      } catch (e) { }
+    };
+    el.querySelectorAll('[data-bukti-lihat]').forEach(b => b.onclick = () => bukaBerkas(b, b.dataset.buktiLihat, false));
+    const skpForm = x => {
+      x = x || { tahun: String(tahun - 1), predikat: 'Baik' };
+      const m = UI.modal({
+        title: x.id_skp ? 'Ubah SKP' : 'Tambah SKP', size: 'sm',
+        body: '<div class="field"><label>Tahun</label><input class="input" type="number" id="sk-t" min="2000" max="' + tahun + '" value="' + esc(x.tahun) + '"></div>' +
+          '<div class="field"><label>Predikat kinerja</label><select class="input" id="sk-p">' + (piliran.predikat_skp || ['Sangat Baik', 'Baik', 'Butuh Perbaikan', 'Kurang', 'Sangat Kurang']).map(p => '<option ' + (x.predikat === p ? 'selected' : '') + '>' + p + '</option>').join('') + '</select></div>' +
+          '<div class="field"><label>Catatan (opsional)</label><input class="input" id="sk-c" value="' + esc(x.catatan || '') + '"></div><span class="hint">Unggah dokumen SKP setelah disimpan.</span>',
+        foot: '<button class="btn btn-outline" data-close>Batal</button><button class="btn btn-primary" data-ok>Simpan</button>'
+      });
+      m.$('[data-ok]').onclick = async e => {
+        const r = await UI.sibuk(e.target, () => API.call('saveSkp', { skp: { id_skp: x.id_skp || '', id_dosen: d.id_dosen, tahun: m.$('#sk-t').value, predikat: m.$('#sk-p').value, catatan: m.$('#sk-c').value } }));
+        m.close(); UI.toast(r.message); onUbah();
+      };
+    };
+    const ba = el.querySelector('[data-skp-add]'); if (ba) ba.onclick = () => skpForm(null);
+    el.querySelectorAll('[data-skp-edit]').forEach(b => b.onclick = () => skpForm(sk.skp.find(x => x.id_skp === b.dataset.skpEdit)));
+    el.querySelectorAll('[data-skp-del]').forEach(b => b.onclick = async () => {
+      if (!await UI.konfirmasi('Hapus SKP?', 'Baris SKP ini dihapus dari perhitungan syarat.', { bahaya: true, ok: 'Hapus' })) return;
+      const r = await UI.sibuk(b, () => API.call('hapusSkp', { id_skp: b.dataset.skpDel })); UI.toast(r.message); onUbah();
+    });
+    const bak = el.querySelector('[data-ak]');
+    if (bak) bak.onclick = () => {
+      const m = UI.modal({
+        title: 'Angka Kredit SISTER & Elkite', size: 'sm',
+        body: '<div class="field"><label>Kekurangan AK ke jenjang berikutnya</label><input class="input" id="ak-k" inputmode="decimal" value="' + esc(sk.ak_kekurangan) + '"><span class="hint">Sesuai perhitungan di SISTER.</span></div>' +
+          '<div class="field"><label>AK penelitian</label><input class="input" id="ak-p" inputmode="decimal" value="' + esc(sk.ak_penelitian) + '"></div>' +
+          '<div class="field"><label>Data SISTER per tanggal</label><input class="input" type="date" id="ak-t" value="' + esc(sk.ak_tgl_data || App.hariIni()) + '"></div>' +
+          '<div class="field"><label>Elkite Tri Dharma</label><select class="input" id="el-s"><option ' + (sk.elkite_status !== 'Sudah' ? 'selected' : '') + '>Belum</option><option ' + (sk.elkite_status === 'Sudah' ? 'selected' : '') + '>Sudah</option></select></div>' +
+          '<div class="field"><label>Tanggal pengisian Elkite</label><input class="input" type="date" id="el-t" value="' + esc(sk.elkite_tgl || '') + '"></div>',
+        foot: '<button class="btn btn-outline" data-close>Batal</button><button class="btn btn-primary" data-ok>Simpan</button>'
+      });
+      m.$('[data-ok]').onclick = async e => {
+        const r = await UI.sibuk(e.target, () => API.call('saveSyaratKhusus', { id_dosen: d.id_dosen, ak_kekurangan: m.$('#ak-k').value, ak_penelitian: m.$('#ak-p').value, ak_tgl_data: m.$('#ak-t').value, elkite_status: m.$('#el-s').value, elkite_tgl: m.$('#el-t').value }));
+        m.close(); UI.toast(r.message); onUbah();
+      };
+    };
+    const pubForm = x => {
+      x = x || { jenis_publikasi: 'Jurnal Nasional', status_jurnal: 'Aktif' };
+      const opsi = (arr, v) => arr.map(o => '<option ' + (v === o ? 'selected' : '') + '>' + o + '</option>').join('');
+      const m = UI.modal({
+        title: x.id_kegiatan ? 'Ubah publikasi' : 'Tambah publikasi', size: 'lg',
+        body: '<div class="form-grid"><div class="field full"><label>Judul artikel *</label><input class="input" id="pb-j" value="' + esc(x.judul || '') + '"></div>' +
+          '<div class="field"><label>Jenis *</label><select class="input" id="pb-k">' + opsi(piliran.jenis_publikasi || ['Jurnal Nasional', 'Jurnal Internasional'], x.jenis_publikasi) + '</select></div>' +
+          '<div class="field"><label>Nama jurnal</label><input class="input" id="pb-n" value="' + esc(x.nama_jurnal || '') + '"></div>' +
+          '<div class="field"><label id="pb-rl">Peringkat</label><select class="input" id="pb-r"></select></div>' +
+          '<div class="field"><label>Tanggal terbit</label><input class="input" type="date" id="pb-t" value="' + esc(x.tgl_terbit || '') + '"></div>' +
+          '<div class="field pb-int"><label>SJR (Scimago)</label><input class="input" id="pb-s" inputmode="decimal" value="' + esc((x.sjr || '').replace('.', ',')) + '" placeholder="mis. 0,25"></div>' +
+          '<div class="field pb-int"><label>Impact Factor</label><input class="input" id="pb-i" inputmode="decimal" value="' + esc((x.impact_factor || '').replace('.', ',')) + '" placeholder="mis. 0,12"></div>' +
+          '<div class="field pb-int"><label>Status jurnal di Scopus</label><select class="input" id="pb-st">' + opsi(piliran.status_jurnal || ['Aktif', 'Cancelled', 'Discontinued'], x.status_jurnal || 'Aktif') + '</select></div>' +
+          '<div class="field"><label>Peran penulis</label><input class="input" id="pb-p" value="' + esc(x.peran || '') + '" placeholder="mis. Penulis pertama"></div>' +
+          '<div class="field"><label>DOI</label><input class="input" id="pb-d" value="' + esc(x.doi || '') + '" placeholder="10.xxxx/xxxxx"></div>' +
+          '<div class="field"><label>Tautan artikel</label><input class="input" id="pb-u" value="' + esc(x.tautan || '') + '" placeholder="https://"></div>' +
+           '<div class="field full pb-int"><span class="hint" style="margin-top:-6px">Jurnal internasional memenuhi bila Q1–Q4, SJR &gt; 0,1 atau IF &gt; 0,05, dan status Aktif.</span></div>' +
+          '<div class="field full"><label class="check"><input type="checkbox" id="pb-c" ' + (x.penulis_korespondensi ? 'checked' : '') + '>Sebagai penulis korespondensi (corresponding author)</label></div></div>' +
+          '<span class="hint">Setelah disimpan, unggah berkas artikel dan bukti korespondensi pada daftar publikasi.</span>',
+        foot: '<button class="btn btn-outline" data-close>Batal</button><button class="btn btn-primary" data-ok>Simpan</button>'
+      });
+      const sync = () => {
+        const k = m.$('#pb-k').value, intl = k === 'Jurnal Internasional';
+        m.$('#pb-rl').textContent = intl ? 'Kuartil Scopus' : 'Peringkat SINTA';
+        const arr = intl ? (piliran.peringkat_internasional || ['Q1', 'Q2', 'Q3', 'Q4']) : k === 'Jurnal Nasional' ? (piliran.peringkat_nasional || ['SINTA 1', 'SINTA 2', 'SINTA 3', 'SINTA 4', 'SINTA 5', 'SINTA 6']) : [];
+        m.$('#pb-r').innerHTML = '<option value="">—</option>' + opsi(arr, x.peringkat_jurnal);
+        m.$('#pb-r').disabled = !arr.length;
+        m.$$('.pb-int').forEach(f => f.classList.toggle('hide', !intl));
+      };
+      m.$('#pb-k').onchange = sync; sync();
+      m.$('[data-ok]').onclick = async e => {
+        const r = await UI.sibuk(e.target, () => API.call('savePublikasi', { publikasi: { id_kegiatan: x.id_kegiatan || '', id_dosen: d.id_dosen, judul: m.$('#pb-j').value, jenis_publikasi: m.$('#pb-k').value, nama_jurnal: m.$('#pb-n').value,
+          peringkat_jurnal: m.$('#pb-r').value, tgl_terbit: m.$('#pb-t').value, sjr: m.$('#pb-s').value, impact_factor: m.$('#pb-i').value, status_jurnal: m.$('#pb-st').value,
+          peran: m.$('#pb-p').value, doi: m.$('#pb-d').value, tautan: m.$('#pb-u').value, penulis_korespondensi: m.$('#pb-c').checked } }));
+        m.close(); UI.toast(r.message, r.memenuhi ? 'ok' : 'warn'); onUbah();
+      };
+    };
+    const bp = el.querySelector('[data-pub-add]'); if (bp) bp.onclick = () => pubForm(null);
+    el.querySelectorAll('[data-pub-edit]').forEach(b => b.onclick = () => pubForm(sk.publikasi.find(x => x.id_kegiatan === b.dataset.pubEdit)));
+    el.querySelectorAll('[data-pub-del]').forEach(b => b.onclick = async () => {
+      if (!await UI.konfirmasi('Hapus publikasi?', 'Publikasi ini tidak lagi dihitung sebagai syarat.', { bahaya: true, ok: 'Hapus' })) return;
+      const r = await UI.sibuk(b, () => API.call('hapusPublikasi', { id_kegiatan: b.dataset.pubDel })); UI.toast(r.message); onUbah();
+    });
+  }
+
+  // ============================================================
+  // TEMPLAT & CONTOH DOKUMEN
+  // ============================================================
+  Pages.templat = async function () {
+    V().innerHTML = UI.skeleton(3);
+    const r = await API.call('listTemplat');
+    if (!App.isCurrent()) return;
+    const admin = App.isAdmin();
+    let h = head('Panduan', 'Templat & Contoh Dokumen', 'Contoh dokumen dari admin SIGAP sebagai acuan menyiapkan berkas kenaikan jabatan, misalnya contoh SKP dan contoh bukti korespondensi author.' ,
+      admin ? '<button class="btn btn-primary" data-tpl-add>' + ic('plus', 16) + 'Tambah templat</button>' : '');
+    h += r.templat.length ? '<div class="dcards">' + r.templat.map(t => '<div class="card card-pad" style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;gap:12px;align-items:flex-start"><div class="frow" style="padding:0;border:0;background:none;grid-template-columns:40px"><div class="fi">' + ic('file', 20) + '</div></div>' +
+      '<div style="min-width:0;flex:1"><div style="font-weight:700;color:var(--ink)">' + esc(t.nama) + '</div><div class="small muted" style="margin-top:2px">' + esc(t.keterangan || '') + '</div></div></div>' +
+      '<div class="small muted">' + (t.ada_berkas ? esc(t.nama_file) + ' · ' + UI.ukuran(t.ukuran) + ' · ' + UI.fmtWaktu(t.diunggah_pada) : '<span style="color:var(--inc-tx)">Berkas belum diunggah admin — belum tampil bagi dosen</span>') + '</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:auto">' + (t.ada_berkas ? '<button class="btn btn-primary btn-sm" data-tpl-dl="' + esc(t.id_templat) + '">' + ic('download', 15) + 'Unduh</button>' : '') +
+      (admin ? '<button class="btn btn-outline btn-sm" data-tpl-edit="' + esc(t.id_templat) + '">' + ic('upload', 14) + (t.ada_berkas ? 'Ganti / ubah' : 'Unggah berkas') + '</button><button class="btn btn-ghost btn-sm" data-tpl-del="' + esc(t.id_templat) + '" title="Hapus">' + ic('trash', 14) + '</button>' : '') + '</div></div>').join('') + '</div>'
+      : '<div class="card">' + UI.empty('file', 'Belum ada templat', admin ? 'Tambahkan contoh dokumen untuk dosen.' : 'Admin belum mengunggah contoh dokumen.') + '</div>';
+    V().innerHTML = h;
+    V().querySelectorAll('[data-tpl-dl]').forEach(b => b.onclick = async () => {
+      const x = await UI.sibuk(b, () => API.call('unduhTemplat', { id_templat: b.dataset.tplDl }));
+      UI.unduhBlob(UI.base64KeBlob(x.base64, x.mime), x.nama_file);
+    });
+    const form = t => {
+      t = t || {};
+      const m = UI.modal({
+        title: t.id_templat ? 'Ubah templat' : 'Tambah templat',
+        body: '<div class="field"><label>Nama *</label><input class="input" id="tp-n" value="' + esc(t.nama || '') + '"></div>' +
+          '<div class="field"><label>Keterangan</label><textarea class="input" id="tp-k" rows="3">' + esc(t.keterangan || '') + '</textarea></div>' +
+          '<div class="field"><label>Berkas ' + (t.ada_berkas ? '(kosongkan bila tidak diganti)' : '') + '</label><input class="input" type="file" id="tp-f" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" style="padding:7px"><span class="hint">PDF, JPG, PNG, Word, atau Excel · maks 5 MB.</span></div>',
+        foot: '<button class="btn btn-outline" data-close>Batal</button><button class="btn btn-primary" data-ok>Simpan</button>'
+      });
+      m.$('[data-ok]').onclick = async e => {
+        const f = m.$('#tp-f').files[0];
+        const data = { templat: { id_templat: t.id_templat || '', nama: m.$('#tp-n').value, keterangan: m.$('#tp-k').value } };
+        if (f) {
+          if (f.size > 5 * 1024 * 1024) return UI.toast('Ukuran berkas melebihi 5 MB', 'err');
+          const ext = (f.name.split('.').pop() || '').toLowerCase();
+          data.mime = f.type || { pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', doc: 'application/msword', xls: 'application/vnd.ms-excel', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' }[ext] || '';
+          data.nama_asli = f.name; data.base64 = await UI.fileKeBase64(f);
+        }
+        const r = await UI.sibuk(e.target, () => API.call('saveTemplat', data));
+        m.close(); UI.toast(r.message); Pages.templat();
+      };
+    };
+    const ad = V().querySelector('[data-tpl-add]'); if (ad) ad.onclick = () => form(null);
+    V().querySelectorAll('[data-tpl-edit]').forEach(b => b.onclick = () => form(r.templat.find(t => t.id_templat === b.dataset.tplEdit)));
+    V().querySelectorAll('[data-tpl-del]').forEach(b => b.onclick = async () => {
+      if (!await UI.konfirmasi('Hapus templat?', 'Templat tidak lagi tampil bagi dosen.', { bahaya: true, ok: 'Hapus' })) return;
+      const x = await UI.sibuk(b, () => API.call('hapusTemplat', { id_templat: b.dataset.tplDel })); UI.toast(x.message); Pages.templat();
+    });
+  };
 
   function renderRiwayat(el, d) {
     const admin = App.isAdmin();
@@ -601,7 +832,11 @@
 
     h += '<div class="card card-pad mb"><div class="lbl" style="margin-bottom:10px">ATURAN KENAIKAN AKTIF (tab ATURAN)</div><div class="rules">' + aturan.map(a =>
       '<div class="rule ' + (a.aktif ? '' : 'off') + '"><div class="rt">' + esc(a.dari) + ' ' + ic('arrowR', 14) + ' ' + esc(a.ke) + (a.aktif ? '' : ' <span class="badge b-gray">nonaktif</span>') + '</div><div class="rd">' +
-      '<span>Masa minimal ' + esc(a.masa_min_bulan) + ' bulan sejak TMT</span><span>BKD ' + esc(a.bkd_min_semester) + ' semester berturut</span><span>' + (a.pendidikan_min ? 'Wajib ' + esc(a.pendidikan_min) : 'Tanpa syarat pendidikan khusus') + '</span></div></div>').join('') + '</div>' +
+      '<span>Masa minimal ' + esc(a.masa_min_bulan) + ' bulan sejak TMT</span><span>BKD ' + esc(a.bkd_min_semester) + ' semester berturut</span><span>' + (a.pendidikan_min ? 'Wajib ' + esc(a.pendidikan_min) : 'Tanpa syarat pendidikan khusus') + '</span>' +
+        (function () { const k = []; const b = v => v === true || String(v).toUpperCase() === 'TRUE';
+          if (b(a.syarat_skp)) k.push('SKP min. Baik 2 tahun'); if (String(a.syarat_ak_penelitian || '').trim()) k.push('AK penelitian ≥ ' + esc(a.syarat_ak_penelitian) + '%');
+          if (b(a.syarat_publikasi)) k.push('1 publikasi SINTA 4+/Scopus Q4+'); if (b(a.syarat_elkite)) k.push('Elkite Tri Dharma');
+          return k.length ? '<span style="color:var(--blue-tx, var(--navy));font-weight:600">Khusus: ' + k.join(' · ') + '</span>' : ''; })() + '</div></div>').join('') + '</div>' +
       '<div class="small muted" style="margin-top:10px">Syarat tambahan: NUPTK dan jeda ' + esc(App.boot.cfg.JEDA_TB_BULAN) + ' bulan setelah tugas belajar selesai. GB dikecualikan.</div></div>';
 
     const tc = {}; dasarTrans.forEach(d => { const t = trans(d); if (t) tc[t] = (tc[t] || 0) + 1; });
@@ -631,7 +866,7 @@
     if (hbList.length) h += '<div class="card mb"><div class="card-head"><div><h3>' + ic('alert', 18) + 'Hambatan utama</h3><div class="sub">Alasan terbanyak pada status Panjang & Data Belum Lengkap</div></div></div><div class="card-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px 28px">' +
       (hbList.length ? hbList.map(x => '<div class="hbar" style="margin:0"><div class="hh"><span>' + esc(x[0]) + '</span><span>' + x[1] + '</span></div><div class="meter short thin"><i style="width:' + Math.round(x[1] * 100 / maxHb) + '%"></i></div></div>').join('') : '<div class="muted">Tidak ada hambatan tercatat.</div>') +
       '</div></div>';
-    h += '<div class="card">' + (l.length ? '<div class="table-wrap"><table class="tbl tbl-cards"><thead><tr><th>Dosen</th><th>Jabatan (TMT)</th><th>Target</th><th>Masa TMT</th><th>BKD</th><th>S3</th><th>NUPTK</th><th>Eligible</th><th>Status</th></tr></thead><tbody>' +
+    h += '<div class="card">' + (l.length ? '<div class="table-wrap"><table class="tbl tbl-cards"><thead><tr><th>Dosen</th><th>Jabatan (TMT)</th><th>Target</th><th>Masa TMT</th><th>BKD</th><th>S3</th><th>NUPTK</th><th>Khusus</th><th>Eligible</th><th>Status</th></tr></thead><tbody>' +
       potong.map(d => {
         const masa = sy(d, 'MASA');
         const tm = tmtAcuan(d);
@@ -641,6 +876,7 @@
           '<td data-l="Target" style="color:var(--blue);font-weight:700">' + esc(d.status.target_label || '—') + '</td>' +
           '<td data-l="Masa TMT">' + (bln === null ? '<span class="muted">—</span>' : '<span class="badge ' + (masa && masa.terpenuhi ? 'b-ready' : 'b-short') + '">' + bln + ' bln</span>') + '</td>' +
           '<td data-l="BKD">' + cel(sy(d, 'BKD')) + '</td><td data-l="S3">' + cel(sy(d, 'S3')) + '</td><td data-l="NUPTK">' + cel(sy(d, 'NUPTK')) + '</td>' +
+          '<td data-l="Khusus">' + (function () { const k = (d.status.syarat || []).filter(x => x.khusus); if (!k.length) return '<span class="muted small">n/a</span>'; const n = k.filter(x => x.terpenuhi).length; return '<span class="nowrap" title="' + esc(k.filter(x => !x.terpenuhi).map(x => x.nama).join('; ')) + '" style="font-weight:700;color:' + (n === k.length ? 'var(--ready-tx)' : 'var(--short-tx)') + '">' + ic(n === k.length ? 'checkCircle' : 'clock', 14) + ' ' + n + '/' + k.length + '</span>'; })() + '</td>' +
           '<td data-l="Eligible">' + tglEligibleHTML(d.status) + '</td><td data-l="Status">' + badge(d.status.status) + '</td></tr>';
       }).join('') + '</tbody></table></div>' + UI.pager(l.length, JBM.hal, per, 'data-hal') : UI.empty('search', 'Tidak ada dosen', 'Ubah filter untuk melihat dosen lain.')) + '</div>';
     V().innerHTML = h;
@@ -667,7 +903,7 @@
     if (App.dosenSaja()) {
       const d = App.dosen.find(x => x.id_dosen === App.user.id_dosen);
       if (!d) { V().innerHTML = UI.empty('alertCircle', 'Akun belum tertaut ke data dosen', ''); return; }
-      V().innerHTML = head('Berkas kepegawaian', 'Berkas Saya', 'Anda dapat melihat dan mengunduh berkas Anda sendiri. Pengunggahan dilakukan oleh admin fakultas.') +
+      V().innerHTML = head('Berkas kepegawaian', 'Berkas Saya', 'Anda dapat melihat dan mengunduh berkas Anda sendiri. Pengunggahan dilakukan oleh admin SIGAP.') +
         '<div class="card card-pad"><div style="margin-bottom:14px">' + UI.meterKel(d.kelengkapan) + '</div><div id="blist"></div></div>';
       Pages.renderBerkasDosen(V().querySelector('#blist'), d, true, null);
       return;
