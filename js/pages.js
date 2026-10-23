@@ -475,7 +475,7 @@
         (boleh ? '<span style="flex:1"></span><button class="btn btn-ghost btn-xs" data-pub-edit="' + esc(x.id_kegiatan) + '">' + ic('edit', 13) + 'Ubah</button><button class="btn btn-ghost btn-xs" data-pub-del="' + esc(x.id_kegiatan) + '">' + ic('trash', 13) + '</button>' : '') + '</div></div>').join('')
         : '<div class="muted">Belum ada publikasi tercatat.</div>') +
       '<p class="muted small" style="margin:12px 0 0">' + ic('info', 13) + ' Memenuhi bila jurnal nasional terakreditasi min. SINTA 4, atau jurnal internasional terindeks Scopus Q1–Q4 dengan SJR &gt; 0,1 atau IF &gt; 0,05 dan status jurnal tidak cancelled/discontinued.</p>' +
-      '<p class="muted small" style="margin:6px 0 0">' + ic('file', 13) + ' Contoh SKP dan contoh bukti korespondensi author tersedia di menu <a href="#/templat">Templat & Contoh</a>.</p></div></div>' +
+      '<p class="muted small" style="margin:6px 0 0">' + ic('file', 13) + ' Contoh SKP dan contoh bukti korespondensi author tersedia di menu <a href="#/templat">Template & Contoh</a>.</p></div></div>' +
       '<input type="file" accept="application/pdf,image/jpeg,image/png" class="hide" id="bukti-file">';
     el.innerHTML = h;
 
@@ -583,14 +583,14 @@
     const r = await API.call('listTemplat');
     if (!App.isCurrent()) return;
     const admin = App.isAdmin();
-    let h = head('Panduan', 'Templat & Contoh Dokumen', 'Contoh dokumen dari admin SIGAP sebagai acuan menyiapkan berkas kenaikan jabatan, misalnya contoh SKP dan contoh bukti korespondensi author.' ,
-      admin ? '<button class="btn btn-primary" data-tpl-add>' + ic('plus', 16) + 'Tambah templat</button>' : '');
+    let h = head('Panduan', 'Template & Contoh Dokumen', 'Contoh dokumen dari admin SIGAP sebagai acuan menyiapkan berkas kenaikan jabatan, misalnya contoh SKP dan contoh bukti korespondensi author.' ,
+      admin ? '<button class="btn btn-primary" data-tpl-add>' + ic('plus', 16) + 'Tambah template</button>' : '');
     h += r.templat.length ? '<div class="dcards">' + r.templat.map(t => '<div class="card card-pad" style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;gap:12px;align-items:flex-start"><div class="frow" style="padding:0;border:0;background:none;grid-template-columns:40px"><div class="fi">' + ic('file', 20) + '</div></div>' +
       '<div style="min-width:0;flex:1"><div style="font-weight:700;color:var(--ink)">' + esc(t.nama) + '</div><div class="small muted" style="margin-top:2px">' + esc(t.keterangan || '') + '</div></div></div>' +
       '<div class="small muted">' + (t.ada_berkas ? esc(t.nama_file) + ' · ' + UI.ukuran(t.ukuran) + ' · ' + UI.fmtWaktu(t.diunggah_pada) : '<span style="color:var(--inc-tx)">Berkas belum diunggah admin — belum tampil bagi dosen</span>') + '</div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:auto">' + (t.ada_berkas ? '<button class="btn btn-primary btn-sm" data-tpl-dl="' + esc(t.id_templat) + '">' + ic('download', 15) + 'Unduh</button>' : '') +
       (admin ? '<button class="btn btn-outline btn-sm" data-tpl-edit="' + esc(t.id_templat) + '">' + ic('upload', 14) + (t.ada_berkas ? 'Ganti / ubah' : 'Unggah berkas') + '</button><button class="btn btn-ghost btn-sm" data-tpl-del="' + esc(t.id_templat) + '" title="Hapus">' + ic('trash', 14) + '</button>' : '') + '</div></div>').join('') + '</div>'
-      : '<div class="card">' + UI.empty('file', 'Belum ada templat', admin ? 'Tambahkan contoh dokumen untuk dosen.' : 'Admin belum mengunggah contoh dokumen.') + '</div>';
+      : '<div class="card">' + UI.empty('file', 'Belum ada template', admin ? 'Tambahkan contoh dokumen untuk dosen.' : 'Admin belum mengunggah contoh dokumen.') + '</div>';
     V().innerHTML = h;
     V().querySelectorAll('[data-tpl-dl]').forEach(b => b.onclick = async () => {
       const x = await UI.sibuk(b, () => API.call('unduhTemplat', { id_templat: b.dataset.tplDl }));
@@ -599,7 +599,7 @@
     const form = t => {
       t = t || {};
       const m = UI.modal({
-        title: t.id_templat ? 'Ubah templat' : 'Tambah templat',
+        title: t.id_templat ? 'Ubah template' : 'Tambah template',
         body: '<div class="field"><label>Nama *</label><input class="input" id="tp-n" value="' + esc(t.nama || '') + '"></div>' +
           '<div class="field"><label>Keterangan</label><textarea class="input" id="tp-k" rows="3">' + esc(t.keterangan || '') + '</textarea></div>' +
           '<div class="field"><label>Berkas ' + (t.ada_berkas ? '(kosongkan bila tidak diganti)' : '') + '</label><input class="input" type="file" id="tp-f" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" style="padding:7px"><span class="hint">PDF, JPG, PNG, Word, atau Excel · maks 5 MB.</span></div>',
@@ -621,7 +621,7 @@
     const ad = V().querySelector('[data-tpl-add]'); if (ad) ad.onclick = () => form(null);
     V().querySelectorAll('[data-tpl-edit]').forEach(b => b.onclick = () => form(r.templat.find(t => t.id_templat === b.dataset.tplEdit)));
     V().querySelectorAll('[data-tpl-del]').forEach(b => b.onclick = async () => {
-      if (!await UI.konfirmasi('Hapus templat?', 'Templat tidak lagi tampil bagi dosen.', { bahaya: true, ok: 'Hapus' })) return;
+      if (!await UI.konfirmasi('Hapus template?', 'Template tidak lagi tampil bagi dosen.', { bahaya: true, ok: 'Hapus' })) return;
       const x = await UI.sibuk(b, () => API.call('hapusTemplat', { id_templat: b.dataset.tplDel })); UI.toast(x.message); Pages.templat();
     });
   };

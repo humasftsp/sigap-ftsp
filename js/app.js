@@ -93,7 +93,7 @@
       { id: 'dashboard', label: 'Dashboard', icon: 'grid' },
       punyaData && !pimp ? { id: 'dosen/' + u.id_dosen, match: 'dosen-saya', label: 'Profil Saya', icon: 'user' } : null,
       !pimp ? { id: 'berkas', label: 'Berkas Saya', icon: 'folder' } : null,
-      !pimp ? { id: 'templat', label: 'Templat & Contoh', icon: 'file' } : null,
+      !pimp ? { id: 'templat', label: 'Template & Contoh', icon: 'file' } : null,
       pimp ? { grup: 'dosen', label: 'Dosen & Jabamik', icon: 'users', items: [
         { id: 'dosen', label: 'Katalog Dosen', icon: 'users' },
         { id: 'jabamik', label: 'Kelayakan Jabamik', icon: 'award', count: 'pendek' },
@@ -109,9 +109,9 @@
         { id: 'organisasi/struktural', match: 'organisasi/struktural', label: 'Jabatan Struktural', icon: 'award' },
         { id: 'organisasi/override', match: 'organisasi/override', label: 'Override Peran', icon: 'shield' }
       ] } : null,
-      { grup: 'laporan', label: 'Laporan & Templat', icon: 'printer', items: [
+      { grup: 'laporan', label: 'Laporan & Template', icon: 'printer', items: [
         { id: 'cetak', label: 'Cetak & Rekap', icon: 'printer' }
-      ].concat(pimp ? [{ id: 'templat', label: 'Templat & Contoh', icon: 'file' }] : []) },
+      ].concat(pimp ? [{ id: 'templat', label: 'Template & Contoh', icon: 'file' }] : []) },
       admin ? { grup: 'admin', label: 'Administrasi', icon: 'sliders', items: [
         { id: 'impor', label: 'Tambah / Impor', icon: 'upload' },
         { id: 'akun', label: 'Pengguna & Akun', icon: 'key' },

@@ -99,8 +99,8 @@
     const wp = XLSX.utils.aoa_to_sheet(pet);
     wp['!cols'] = [{ wch: 22 }, { wch: 20 }, { wch: 70 }, { wch: 34 }];
     XLSX.utils.book_append_sheet(wb, wp, 'Petunjuk');
-    XLSX.writeFile(wb, 'Templat-Impor-Dosen-SIGAP.xlsx');
-    UI.toast('Templat diunduh');
+    XLSX.writeFile(wb, 'Template-Impor-Dosen-SIGAP.xlsx');
+    UI.toast('Template diunduh');
   }
 
   function muatSheetJS() {
@@ -199,14 +199,14 @@
   function renderImpor() {
     const steps = ['Pilih berkas', 'Pemetaan kolom', 'Simulasi', 'Selesai'];
     let h = head('Data dosen', 'Tambah / Impor Data Dosen', 'Impor data awal dari 2026-JABAMIK.xlsx. TMT kosong atau berupa teks tidak menggagalkan impor — dosen ditandai <b>Data belum lengkap</b>. Impor ulang memperbarui dosen yang sama (dicocokkan lewat NIDN, NUPTK, lalu nama).',
-      '<button class="btn btn-outline" data-templat>' + ic('download', 16) + 'Unduh templat Excel</button><button class="btn btn-outline" data-manual>' + ic('plus', 16) + 'Tambah satu dosen</button>');
+      '<button class="btn btn-outline" data-templat>' + ic('download', 16) + 'Unduh template Excel</button><button class="btn btn-outline" data-manual>' + ic('plus', 16) + 'Tambah satu dosen</button>');
     h += '<div class="steps">' + steps.map((s, i) => '<div class="s ' + (IMP.step === i + 1 ? 'on' : IMP.step > i + 1 ? 'done' : '') + '"><span class="n">' + (IMP.step > i + 1 ? '✓' : i + 1) + '</span>' + s + '</div>').join('') + '</div>';
 
     if (IMP.step === 1) {
       h += '<label class="drop" id="drop"><input type="file" id="f-xl" accept=".xlsx,.xls,.csv" class="hide">' +
         '<div class="empty" style="padding:0"><div class="e-ico">' + ic('sheet', 26) + '</div><b>Klik atau seret berkas Excel ke sini</b><div>.xlsx, .xls, atau .csv · berkas dibaca di browser Anda, belum dikirim ke server</div></div></label>' +
-        '<div class="alert-box blue standalone" style="margin-top:16px">' + ic('info', 16) + '<div><b>Tips</b>Belum punya format? Klik <b>Unduh templat Excel</b>: berisi judul kolom yang langsung dikenali, satu baris contoh, dan sheet Petunjuk berisi kolom wajib serta pilihan isian. Bila dosen tiap prodi ada di sheet berbeda, impor satu sheet per kali dan pilih "Homebase untuk sheet ini". Berkas Excel ber-password belum didukung.</div></div>' +
-        '<div class="card mb" style="margin-top:16px"><div class="card-head"><div><h3>' + ic('sheet', 18) + 'Kolom templat impor</h3><div class="sub">Baris contoh (nama diawali "CONTOH") otomatis dilewati saat impor.</div></div></div><div class="card-body" style="padding:12px 0 0"><div class="table-wrap"><table class="tbl tbl-cards"><thead><tr><th>Kolom</th><th>Keterangan</th><th>Format / pilihan</th><th>Contoh isian</th></tr></thead><tbody>' +
+        '<div class="alert-box blue standalone" style="margin-top:16px">' + ic('info', 16) + '<div><b>Tips</b>Belum punya format? Klik <b>Unduh template Excel</b>: berisi judul kolom yang langsung dikenali, satu baris contoh, dan sheet Petunjuk berisi kolom wajib serta pilihan isian. Bila dosen tiap prodi ada di sheet berbeda, impor satu sheet per kali dan pilih "Homebase untuk sheet ini". Berkas Excel ber-password belum didukung.</div></div>' +
+        '<div class="card mb" style="margin-top:16px"><div class="card-head"><div><h3>' + ic('sheet', 18) + 'Kolom template impor</h3><div class="sub">Baris contoh (nama diawali "CONTOH") otomatis dilewati saat impor.</div></div></div><div class="card-body" style="padding:12px 0 0"><div class="table-wrap"><table class="tbl tbl-cards"><thead><tr><th>Kolom</th><th>Keterangan</th><th>Format / pilihan</th><th>Contoh isian</th></tr></thead><tbody>' +
         TEMPLAT.map(t => '<tr><td><b>' + esc(t[0]) + '</b></td><td data-l="Keterangan"><span class="badge ' + (/^Wajib/.test(t[1]) ? 'b-inc' : t[1] === 'Disarankan' ? 'b-short' : 'b-gray') + '">' + esc(t[1]) + '</span></td><td data-l="Format" class="small">' + esc(t[2]) + '</td><td data-l="Contoh" class="small" style="font-family:ui-monospace,monospace">' + esc(t[3] || '—') + '</td></tr>').join('') +
         '</tbody></table></div></div></div>';
     }
