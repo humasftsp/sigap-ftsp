@@ -39,7 +39,7 @@ Opsional: di file `Setup`, isi `SETUP_ADMIN_EMAIL` dengan email admin pertama. B
 ### A3. Jalankan setup (SEKALI saja)
 1. Di dropdown fungsi, pilih **`setupAppEnvironment`**, lalu klik **▶ Run**.
 2. Klik **Review permissions**, pilih akun, lalu **Advanced → Go to SIGAP FTSP Backend (unsafe) → Allow**. Peringatan "unsafe" ini normal untuk skrip buatan sendiri.
-3. Buka **Execution log** dan **catat baris `Password awal admin: ...`**. Password ini hanya muncul sekali.
+3. Buka **Execution log** dan **catat baris `Password awal admin: ...`**. Password ini hanya muncul sekali. Log juga memuat baris `Akun dosen contoh: dosen.contoh@sigap.local / ...` (lihat C11).
 4. Periksa Google Drive. Folder **📁 SIGAP FTSP** harus berisi spreadsheet database, folder *Berkas Dosen*, dan folder *Backup*.
 
 > ⚠️ Jangan jalankan `setupAppEnvironment` dua kali, karena sistem akan menolaknya. Bila lupa password admin, jalankan `resetPasswordAdminDarurat` lalu lihat log.
@@ -62,6 +62,8 @@ Bila backend versi lama sudah berjalan, **jangan** jalankan `setupAppEnvironment
 3. Buka aplikasi dan login. Permintaan pertama menjalankan **migrasi otomatis** satu kali. Data lama tidak dihapus. Migrasi melakukan hal berikut:
    - Membuat tab baru `PRODI`, `RIWAYAT_HOMEBASE`, `JABATAN_STRUKTURAL`, `PERAN_OVERRIDE`, dan `PERSETUJUAN_PRIVASI`.
    - Mengganti nama kolom `tmt_jabatan` menjadi `tmt_jabamik`. Kolom `prodi` lama menjadi `prodi_lama` dan diubah menjadi homebase. Nama prodi tanpa jenjang dianggap **S1**.
+   - Mengubah akun berperan *Dekan* atau *WD IV* menjadi peran dasar *Pimpinan* (hanya baca). Dekan dan Wakil Dekan sekarang dicatat di Jabatan Struktural (C9).
+   - Membuat akun dosen contoh (C11) dan mengisi *Status dosen* semua dosen dengan *Aktif*.
    - Mengubah akun berperan *Kaprodi* menjadi peran dasar *Dosen* dengan **override Kaprodi selama 3 bulan**. Ganti override ini dengan jabatan struktural (lihat C9).
    - Memberi admin yang sudah ada izin vault dan izin dokumen identitas, seperti hak mereka sebelumnya.
    - Mencatat seluruh perubahan di `AUDIT_LOG` dengan aksi `MIGRASI_SKEMA`.
@@ -105,7 +107,7 @@ Upload lewat web GitHub merusak struktur folder `css/` dan `js/`, sehingga tampi
 
 1. Login dengan email admin dan password awal, ganti password (wajib), lalu setujui **Pemberitahuan Privasi**. Setiap pengguna diminta menyetujuinya sekali pada login pertama, dan diminta lagi bila admin menaikkan *Versi pemberitahuan privasi* di Pengaturan → Umum.
 2. Buka **Pengaturan → Usia pensiun** dan isi usia pensiun per jabatan. PRD sengaja tidak menetapkannya; sebelum diisi, panel pensiun belum menghitung apa pun.
-3. Buka **Pengaturan → Penerima email** dan isi email Dekan dan admin. Email Kaprodi **diambil otomatis dari jabatan struktural** (C9); baris Kaprodi di sini hanya menjadi cadangan untuk prodi yang belum memiliki Kaprodi aktif. WD IV dapat diaktifkan di tab *Umum*.
+3. Buka **Pengaturan → Penerima email** dan isi email admin. Email Dekan dan Kaprodi **diambil otomatis dari jabatan struktural** (C9). Wakil Dekan yang ditembuskan dipilih di *Pengaturan → Umum*; baris Kaprodi di sini hanya menjadi cadangan untuk prodi yang belum memiliki Kaprodi aktif. WD IV dapat diaktifkan di tab *Umum*.
 4. Di **Pengaturan → Umum**, klik **Isi URL halaman ini**. URL ini dipakai untuk tombol di email **dan untuk menampilkan logo FTSP di kepala email**; tanpa URL, email hanya menampilkan teks.
 5. Buka **Tambah / Impor**, unggah `2026-JABAMIK.xlsx`, jalankan **Simulasi**, lalu **Impor sekarang**. Importer sudah disesuaikan dengan format file ini:
    - Homebase dibaca dari baris judul bagian ("Teknik Sipil", "Arsitektur"). Hasil seharusnya **24 + 30 dosen**. Excel tidak menyebut jenjang, sehingga semua dosen diberi homebase **S1** (dicatat sebagai asumsi). Pindahkan dosen S2 lewat langkah C9.
@@ -127,9 +129,11 @@ Upload lewat web GitHub merusak struktur folder `css/` dan `js/`, sehingga tampi
 9. Buka menu **Organisasi** (submenu di sidebar):
    - **Program Studi**: periksa 4 prodi awal (S1/S2 Teknik Sipil, S1/S2 Arsitektur). Kode PDDikti awal adalah kode nasional bidang ilmu (22201, 22101, 23201, 23101), jadi **cocokkan dengan PDDikti** dan perbaiki bila berbeda.
    - **Homebase Dosen**: centang dosen yang berhomebase S2, klik **Ubah homebase**, lalu isi tanggal berlaku dan alasan. Dosen berstatus *Belum ditetapkan* ditampilkan paling atas.
-   - **Jabatan Struktural**: tambahkan Kaprodi dan Sekprodi tiap prodi beserta periode dan No SK. Dosen yang menjabat otomatis mendapat akses pantau prodi tersebut tanpa akun terpisah. Akunnya tetap akun dosen biasa.
+   - **Jabatan Struktural**: catat **Dekan dan Wakil Dekan I–IV** beserta periodenya, termasuk pejabat periode lalu. Pejabat yang tidak ada di data dosen dicatat dengan centang *Pejabat di luar data dosen*. Dekan dan Wakil Dekan aktif otomatis dapat memantau seluruh dosen (hanya baca). Tambahkan juga Kaprodi dan Sekprodi tiap prodi beserta periode dan No SK. Dosen yang menjabat otomatis mendapat akses pantau prodi tersebut tanpa akun terpisah. Akunnya tetap akun dosen biasa.
    - **Override Peran**: hanya untuk pengecualian, misalnya Kaprodi cuti. Setiap override wajib beralasan dan memiliki tanggal berakhir.
 10. Buka **Pengguna & Akun** dan tentukan admin yang memegang **izin vault** (boleh melihat password) dan **izin dokumen identitas** (boleh membuka KTP dan ijazah dosen lain). Izin akun sendiri hanya dapat diubah oleh admin lain. Password akun admin tidak disimpan di vault.
+11. **Akun dosen contoh** (`dosen.contoh@sigap.local`) dibuat otomatis untuk memperkenalkan SIGAP kepada dosen. Datanya fiktif dan tidak dihitung di dashboard, laporan, maupun email. Akun ini hanya melihat datanya sendiri dan tidak dapat mengganti password. Passwordnya dapat dilihat lewat tombol *Lihat* (izin vault). Bila password ini dibagikan, ganti berkala dengan *Reset*, atau nonaktifkan akunnya saat tidak dipakai.
+12. Untuk impor data dosen baru, buka **Tambah / Impor → Unduh templat Excel**. Templat berisi judul kolom yang langsung dikenali, satu baris contoh (otomatis dilewati saat impor), dan sheet *Petunjuk*.
 
 ---
 

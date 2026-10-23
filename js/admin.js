@@ -1,7 +1,6 @@
 /**
  * SIGAP FTSP — admin.js
- * Halaman khusus admin: Impor Excel (FR-04), Pengguna & Akun (FR-02),
- * Pengaturan (FR-14), Log & Audit (FR-15).
+ * Halaman khusus admin: Impor Excel, Pengguna & Akun, Pengaturan, Log & Audit.
  */
 (function () {
   const { ic, esc, fmtTgl, fmtWaktu } = UI;
@@ -41,9 +40,68 @@
     ['s3_lulus', 'S3 lulus', ['lulus s3', 'tahun s3', 's3 lulus']],
     ['tb_mulai', 'Tugas belajar mulai', ['tb mulai', 'mulai tb', 'tugas belajar mulai']],
     ['tb_selesai', 'Tugas belajar selesai', ['tb selesai', 'selesai tb', 'tugas belajar selesai', 'akhir tb']],
+    ['status_dosen', 'Status dosen', ['status dosen', 'status kepegawaian', 'status aktif']],
     ['catatan', 'Catatan / keterangan', ['keterangan', 'catatan', 'ket']]
   ];
   const IMP = { step: 1 };
+
+  /** Kolom templat impor: [judul kolom, wajib?, format/pilihan, contoh]. Judul cocok dengan pemetaan otomatis. */
+  const TEMPLAT = [
+    ['Nama', 'Wajib', 'Nama lengkap beserta gelar', 'CONTOH - Dr. Ir. Budi Santoso, S.T., M.T.'],
+    ['NIDN', 'Disarankan', '10 digit; ketik sebagai teks agar nol di depan tidak hilang', '0312345678'],
+    ['NUPTK', 'Disarankan', '16 digit, teks', '1234567890123456'],
+    ['Homebase', 'Disarankan', 'Nama prodi dengan jenjang, salah satu dari daftar Prodi di sheet Petunjuk. Kosong = "Belum ditetapkan"', 'S1 Teknik Sipil'],
+    ['Jabatan', 'Wajib', 'TP / ASA / L / LK / GB, atau nama lengkap (Tenaga Pengajar, Asisten Ahli, Lektor, Lektor Kepala, Guru Besar)', 'L'],
+    ['TMT Jabamik', 'Wajib (kecuali TP)', 'Tanggal berlaku jabatan akademik terakhir, format YYYY-MM-DD', '2022-03-01'],
+    ['TMT Karyawan Tetap', 'Wajib untuk TP', 'Tanggal pengangkatan karyawan tetap, YYYY-MM-DD', '2012-09-01'],
+    ['No SK', 'Opsional', 'Nomor SK jabatan akademik terakhir', '123/SK/USAKTI/2022'],
+    ['Status Dosen', 'Opsional', 'Aktif / Tugas Belajar / Izin Belajar / Cuti di Luar Tanggungan / Diperbantukan / Pensiun / Berhenti. Kosong = Aktif', 'Aktif'],
+    ['Tgl Lahir', 'Disarankan', 'YYYY-MM-DD (untuk pengingat pensiun)', '1980-05-17'],
+    ['Email', 'Disarankan', 'Email untuk login & pengingat', 'budi.santoso@trisakti.ac.id'],
+    ['No WA', 'Opsional', '08xx atau +62xx', '081234567890'],
+    ['BKD', 'Disarankan', 'Jumlah semester BKD terpenuhi berturut-turut (angka)', '4'],
+    ['Serdos', 'Opsional', 'Ada / Belum, boleh ditambah tahun', 'Ada, 2015'],
+    ['Status NUPTK', 'Opsional', 'Ada / Belum (otomatis Ada bila NUPTK terisi)', 'Ada'],
+    ['S1 Univ', 'Opsional', 'Nama perguruan tinggi', 'Universitas Trisakti'],
+    ['S1 Lulus', 'Opsional', 'Tahun atau tanggal lulus', '2004'],
+    ['S2 Univ', 'Opsional', 'Nama perguruan tinggi', 'Institut Teknologi Bandung'],
+    ['S2 Lulus', 'Opsional', 'Tahun atau tanggal lulus', '2008'],
+    ['S3 Univ', 'Opsional', 'Kosongkan bila belum S3', 'Universitas Indonesia'],
+    ['S3 Lulus', 'Opsional', 'Tanggal lulus S3 (wajib untuk L→LK dan LK→GB)', '2019-08-15'],
+    ['TB Mulai', 'Opsional', 'Mulai tugas belajar, YYYY-MM-DD', ''],
+    ['TB Selesai', 'Opsional', 'Selesai/estimasi selesai tugas belajar, YYYY-MM-DD', ''],
+    ['Bidang Keahlian', 'Opsional', 'Pisahkan dengan koma', 'Rekayasa Gempa, Beton Pracetak'],
+    ['Keterangan', 'Opsional', 'Catatan internal admin', '']
+  ];
+  async function unduhTemplat(btn) {
+    await UI.sibuk(btn, muatSheetJS);
+    const wb = XLSX.utils.book_new();
+    const teksKol = ['NIDN', 'NUPTK', 'No WA', 'TMT Jabamik', 'TMT Karyawan Tetap', 'Tgl Lahir', 'S3 Lulus', 'TB Mulai', 'TB Selesai'];
+    const data = [TEMPLAT.map(t => t[0]), TEMPLAT.map(t => t[3])];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    // sel teks agar nol di depan & tanggal tidak diubah Excel
+    TEMPLAT.forEach((t, c) => {
+      if (teksKol.indexOf(t[0]) < 0) return;
+      const ref = XLSX.utils.encode_cell({ r: 1, c }); if (ws[ref]) { ws[ref].t = 's'; ws[ref].z = '@'; }
+    });
+    ws['!cols'] = TEMPLAT.map(t => ({ wch: Math.max(12, Math.min(40, String(t[3] || t[0]).length + 4)) }));
+    XLSX.utils.book_append_sheet(wb, ws, 'Data Dosen');
+    const prodi = (App.boot.prodi_master || []).filter(p => p.aktif).map(p => p.label);
+    const pet = [['PETUNJUK PENGISIAN TEMPLAT IMPOR DOSEN — SIGAP FTSP'], [],
+      ['1. Isi data mulai baris 3 sheet "Data Dosen". Baris 2 adalah contoh dan otomatis dilewati saat impor (nama diawali "CONTOH").'],
+      ['2. Jangan ubah judul kolom di baris 1. Kolom yang tidak dipakai boleh dikosongkan atau dihapus.'],
+      ['3. Format tanggal YYYY-MM-DD (mis. 2022-03-01). Ketik NIDN/NUPTK sebagai teks agar nol di depan tidak hilang.'],
+      ['4. Impor ulang memperbarui dosen yang sama (dicocokkan lewat NIDN, NUPTK, lalu nama). Sel kosong tidak menimpa data lama.'],
+      ['5. Homebase dosen lama tidak diubah lewat impor; ubah lewat menu Organisasi → Homebase Dosen.'], [],
+      ['Kolom', 'Keterangan', 'Format / pilihan', 'Contoh']].concat(TEMPLAT.map(t => [t[0], t[1], t[2], t[3]]))
+      .concat([[], ['Pilihan Homebase (Prodi aktif)']]).concat(prodi.map(p => [p]))
+      .concat([[], ['Kode Jabatan'], ['TP', 'Tenaga Pengajar'], ['ASA', 'Asisten Ahli'], ['L', 'Lektor'], ['LK', 'Lektor Kepala'], ['GB', 'Guru Besar']]);
+    const wp = XLSX.utils.aoa_to_sheet(pet);
+    wp['!cols'] = [{ wch: 22 }, { wch: 20 }, { wch: 70 }, { wch: 34 }];
+    XLSX.utils.book_append_sheet(wb, wp, 'Petunjuk');
+    XLSX.writeFile(wb, 'Templat-Impor-Dosen-SIGAP.xlsx');
+    UI.toast('Templat diunduh');
+  }
 
   function muatSheetJS() {
     if (window.XLSX) return Promise.resolve();
@@ -140,14 +198,17 @@
 
   function renderImpor() {
     const steps = ['Pilih berkas', 'Pemetaan kolom', 'Simulasi', 'Selesai'];
-    let h = head('FR-03 & FR-04', 'Tambah / Impor Data Dosen', 'Impor data awal dari 2026-JABAMIK.xlsx. TMT kosong atau berupa teks tidak menggagalkan impor — dosen ditandai <b>Data belum lengkap</b>. Impor ulang memperbarui dosen yang sama (dicocokkan lewat NIDN, NUPTK, lalu nama).',
-      '<button class="btn btn-outline" data-manual>' + ic('plus', 16) + 'Tambah satu dosen</button>');
+    let h = head('Data dosen', 'Tambah / Impor Data Dosen', 'Impor data awal dari 2026-JABAMIK.xlsx. TMT kosong atau berupa teks tidak menggagalkan impor — dosen ditandai <b>Data belum lengkap</b>. Impor ulang memperbarui dosen yang sama (dicocokkan lewat NIDN, NUPTK, lalu nama).',
+      '<button class="btn btn-outline" data-templat>' + ic('download', 16) + 'Unduh templat Excel</button><button class="btn btn-outline" data-manual>' + ic('plus', 16) + 'Tambah satu dosen</button>');
     h += '<div class="steps">' + steps.map((s, i) => '<div class="s ' + (IMP.step === i + 1 ? 'on' : IMP.step > i + 1 ? 'done' : '') + '"><span class="n">' + (IMP.step > i + 1 ? '✓' : i + 1) + '</span>' + s + '</div>').join('') + '</div>';
 
     if (IMP.step === 1) {
       h += '<label class="drop" id="drop"><input type="file" id="f-xl" accept=".xlsx,.xls,.csv" class="hide">' +
         '<div class="empty" style="padding:0"><div class="e-ico">' + ic('sheet', 26) + '</div><b>Klik atau seret berkas Excel ke sini</b><div>.xlsx, .xls, atau .csv · berkas dibaca di browser Anda, belum dikirim ke server</div></div></label>' +
-        '<div class="alert-box blue standalone" style="margin-top:16px">' + ic('info', 16) + '<div><b>Tips</b>Bila dosen Teknik Sipil dan Arsitektur ada di sheet berbeda, impor satu sheet per kali dan pilih "Prodi untuk sheet ini". Berkas Excel ber-password belum didukung.</div></div>';
+        '<div class="alert-box blue standalone" style="margin-top:16px">' + ic('info', 16) + '<div><b>Tips</b>Belum punya format? Klik <b>Unduh templat Excel</b>: berisi judul kolom yang langsung dikenali, satu baris contoh, dan sheet Petunjuk berisi kolom wajib serta pilihan isian. Bila dosen tiap prodi ada di sheet berbeda, impor satu sheet per kali dan pilih "Homebase untuk sheet ini". Berkas Excel ber-password belum didukung.</div></div>' +
+        '<div class="card mb" style="margin-top:16px"><div class="card-head"><div><h3>' + ic('sheet', 18) + 'Kolom templat impor</h3><div class="sub">Baris contoh (nama diawali "CONTOH") otomatis dilewati saat impor.</div></div></div><div class="card-body" style="padding:12px 0 0"><div class="table-wrap"><table class="tbl tbl-cards"><thead><tr><th>Kolom</th><th>Keterangan</th><th>Format / pilihan</th><th>Contoh isian</th></tr></thead><tbody>' +
+        TEMPLAT.map(t => '<tr><td><b>' + esc(t[0]) + '</b></td><td data-l="Keterangan"><span class="badge ' + (/^Wajib/.test(t[1]) ? 'b-inc' : t[1] === 'Disarankan' ? 'b-short' : 'b-gray') + '">' + esc(t[1]) + '</span></td><td data-l="Format" class="small">' + esc(t[2]) + '</td><td data-l="Contoh" class="small" style="font-family:ui-monospace,monospace">' + esc(t[3] || '—') + '</td></tr>').join('') +
+        '</tbody></table></div></div></div>';
     }
     if (IMP.step === 2) {
       const headers = judulKolom(IMP.aoa, IMP.headerRow).map((x, i) => x || 'Kolom ' + (i + 1));
@@ -214,6 +275,7 @@
       V().querySelectorAll('[data-map]').forEach(s => s.onchange = () => { if (s.value === '') delete IMP.map[s.dataset.map]; else IMP.map[s.dataset.map] = +s.value; renderImpor(); });
       V().querySelector('[data-sim]').onclick = e => kirim(e.currentTarget, true);
     }
+    const tpl = V().querySelector('[data-templat]'); if (tpl) tpl.onclick = e => unduhTemplat(e.currentTarget).catch(() => { });
     const reset = V().querySelector('[data-reset]'); if (reset) reset.onclick = () => { Object.keys(IMP).forEach(k => delete IMP[k]); IMP.step = 1; renderImpor(); };
     const back = V().querySelector('[data-back]'); if (back) back.onclick = () => { IMP.step = 2; renderImpor(); };
     const go = V().querySelector('[data-go]'); if (go) go.onclick = async e => {
@@ -249,8 +311,8 @@
   // PENGGUNA & AKUN
   // ============================================================
   const AK = { q: '', role: '', hal: 1 };
-  // Peran dasar (PRD v1.3). Kaprodi/Sekprodi diberikan otomatis dari jabatan struktural atau override.
-  const PERAN = [['ADMIN', 'Admin'], ['DOSEN', 'Dosen'], ['DEKAN', 'Dekan'], ['WD4', 'WD IV']];
+  // Peran dasar. Dekan, Wakil Dekan, Kaprodi, dan Sekprodi diberikan otomatis dari jabatan struktural atau override.
+  const PERAN = [['ADMIN', 'Admin'], ['DOSEN', 'Dosen'], ['PIMPINAN', 'Pimpinan']];
   Pages.akun = async function () {
     V().innerHTML = UI.skeleton();
     const r = await API.call('listUsers');
@@ -265,7 +327,7 @@
     let l = users;
     if (AK.role) l = l.filter(u => u.role === AK.role);
     if (AK.q) { const q = AK.q.toLowerCase(); l = l.filter(u => (u.nama + ' ' + u.email + ' ' + u.nama_dosen).toLowerCase().indexOf(q) >= 0); }
-    l = l.slice().sort((a, b) => (b.terkunci - a.terkunci) || (['ADMIN', 'DEKAN', 'WD4', 'DOSEN'].indexOf(a.role) - ['ADMIN', 'DEKAN', 'WD4', 'DOSEN'].indexOf(b.role)) || a.nama.localeCompare(b.nama));
+    l = l.slice().sort((a, b) => (b.terkunci - a.terkunci) || (['ADMIN', 'PIMPINAN', 'DOSEN'].indexOf(a.role) - ['ADMIN', 'PIMPINAN', 'DOSEN'].indexOf(b.role)) || a.nama.localeCompare(b.nama));
     const totalL = l.length, perA = 25;
     if (AK.hal > Math.ceil(totalL / perA)) AK.hal = 1;
     l = l.slice((AK.hal - 1) * perA, AK.hal * perA);
@@ -273,11 +335,11 @@
     const wajib = users.filter(u => u.wajib_ganti_password && u.aktif).length;
     const validTanpa = dosen_tanpa_akun.filter(d => d.email_valid).length;
 
-    let h = head('FR-01 & FR-02', 'Pengguna & Akun', 'Login memakai email + password (tidak harus akun Google). Lima kali salah password mengunci akun 15 menit.',
+    let h = head('Akun & keamanan', 'Pengguna & Akun', 'Login memakai email + password (tidak harus akun Google). Lima kali salah password mengunci akun 15 menit.',
       '<button class="btn btn-primary" data-add>' + ic('userPlus', 16) + 'Tambah akun</button>');
     h += '<section class="hero" style="padding:18px 22px">' + UI.motif(0.06) + '<div class="h-row" style="align-items:center"><div style="display:flex;gap:14px;align-items:flex-start"><div class="k-ico" style="background:rgba(255,255,255,.12);color:#fff;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:none">' + ic('shield', 20) + '</div>' +
       '<div><div style="font-weight:800;letter-spacing:.04em;font-size:12px">KEBIJAKAN PASSWORD VAULT</div><p style="margin:4px 0 0;font-size:13px">Hanya admin bertanda <b>izin vault</b> yang dapat melihat password dosen, Kaprodi, dan pimpinan (keputusan pemilik produk). Password admin tidak disimpan di vault. Setiap pembukaan tercatat di AUDIT_LOG dan tampil maksimal 15 detik.' + (App.user.admin_vault ? '' : ' <b>Akun Anda tidak memiliki izin vault.</b>') + '</p></div></div>' +
-      '<a class="btn btn-outline btn-sm" href="#/log?tab=audit&aksi=LIHAT_PASSWORD" style="background:#fff">Periksa log vault</a></div></section>';
+      '<a class="btn btn-outline btn-sm" href="#/log?tab=audit&aksi=LIHAT_PASSWORD" style="background:var(--surface)">Periksa log vault</a></div></section>';
     const kp = (cls, label, v, s, icon) => '<div class="card kpi ' + cls + '"><div class="k-top"><div class="k-label">' + label + '</div><div class="k-ico">' + ic(icon, 18) + '</div></div><div class="k-val tabular">' + v + '</div><div class="k-desc">' + s + '</div></div>';
     h += '<div class="grid g-4 mb">' + kp('', 'Total akun', users.length, PERAN.map(p => users.filter(u => u.role === p[0]).length + ' ' + p[1]).join(' · '), 'users') +
       kp('ready', 'Akun aktif', users.filter(u => u.aktif).length, 'Dapat login', 'checkCircle') +
@@ -291,10 +353,11 @@
     h += '<div class="card"><div class="table-wrap"><table class="tbl tbl-cards"><thead><tr><th>Pengguna</th><th>Peran</th><th>Cakupan</th><th>Status</th><th>Login terakhir</th><th class="num">Aksi</th></tr></thead><tbody>' +
       l.map(u => {
         const status = !u.aktif ? '<span class="badge b-gray">Nonaktif</span>' : u.terkunci ? '<span class="badge b-inc">' + ic('lock', 12) + 'Terkunci</span>' : u.wajib_ganti_password ? '<span class="badge b-short">Wajib ganti</span>' : '<span class="badge b-ready"><span class="dot"></span>Aktif</span>';
-        return '<tr><td><div class="person"><div class="avatar sm" style="' + (u.role === 'ADMIN' ? 'background:var(--navy);color:#fff;border-color:var(--navy)' : '') + '">' + esc(UI.inisial(u.nama)) + '</div><div><div class="pn">' + esc(u.nama) + '</div><div class="ps">' + esc(u.email) + '</div></div></div></td>' +
+        return '<tr><td><div class="person"><div class="avatar sm" style="' + (u.role === 'ADMIN' ? 'background:var(--navy-bg);color:#fff;border-color:var(--navy-bg)' : '') + '">' + esc(UI.inisial(u.nama)) + '</div><div><div class="pn">' + esc(u.nama) + '</div><div class="ps">' + esc(u.email) + '</div></div></div></td>' +
           '<td data-l="Peran"><span class="badge ' + (u.role === 'ADMIN' ? 'b-navy' : 'b-blue') + '">' + esc(App.roleLabel(u.role)) + '</span></td>' +
-          '<td data-l="Cakupan" class="small">' + esc(u.role === 'DOSEN' ? (u.nama_dosen || '⚠ belum tertaut') : u.role === 'ADMIN' ? 'Kelola semua' : 'Semua (baca)') +
-          (u.peran_tambahan || []).map(p => '<div><span class="badge b-gb" style="margin-top:4px">+ ' + esc(p.replace(/^KAPRODI/, 'Kaprodi').replace(/^SEKPRODI/, 'Sekprodi').replace(/^WD4/, 'WD IV').replace(/^DEKAN/, 'Dekan')) + '</span></div>').join('') +
+          '<td data-l="Cakupan" class="small">' + esc(u.role === 'DOSEN' ? (u.nama_dosen || '⚠ belum tertaut') : u.role === 'ADMIN' ? 'Kelola semua' : 'Semua dosen (hanya baca)') +
+          (u.peran_tambahan || []).map(p => '<div><span class="badge b-gb" style="margin-top:4px">+ ' + esc(p.replace(/^KAPRODI/, 'Kaprodi').replace(/^SEKPRODI/, 'Sekprodi').replace(/^WAKIL_DEKAN/, 'Wakil Dekan').replace(/^DEKAN/, 'Dekan')) + '</span></div>').join('') +
+          (u.akun_contoh ? '<div><span class="badge b-blue" style="margin-top:4px">Akun contoh · tidak dihitung</span></div>' : '') +
           (u.role === 'ADMIN' && (u.admin_vault || u.admin_dokumen_identitas) ? '<div class="muted" style="margin-top:4px">' + [u.admin_vault ? 'izin vault' : '', u.admin_dokumen_identitas ? 'izin dokumen identitas' : ''].filter(Boolean).join(' · ') + '</div>' : '') + '</td>' +
           '<td data-l="Status">' + status + (u.gagal_login && !u.terkunci ? ' <span class="small muted">' + u.gagal_login + '× gagal</span>' : '') + '</td>' +
           '<td data-l="Login" class="small nowrap">' + (u.login_terakhir ? fmtWaktu(u.login_terakhir) : '<span class="muted">Belum pernah</span>') + '</td>' +
@@ -378,7 +441,7 @@
         '<label class="check" style="margin-bottom:6px"><input type="checkbox" id="u-vault" ' + (v.admin_vault ? 'checked' : '') + '>Boleh melihat password pengguna lain (admin_vault)</label><br>' +
         '<label class="check"><input type="checkbox" id="u-ident" ' + (v.admin_dokumen_identitas ? 'checked' : '') + '>Boleh membuka KTP & ijazah dosen (admin_dokumen_identitas)</label>' +
         '<span class="hint" style="display:block;margin-top:6px">Izin akun Anda sendiri hanya dapat diubah admin lain.</span></div>' +
-        '<div class="alert-box blue standalone full" style="grid-column:1/-1;margin:0 0 12px">' + ic('info', 16) + '<div>Peran <b>Kaprodi/Sekprodi</b> tidak dipilih di sini: diberikan otomatis dari <a href="#/organisasi/struktural">jabatan struktural</a> aktif atau lewat <a href="#/organisasi/override">override peran</a>.</div></div>' +
+        '<div class="alert-box blue standalone full" style="grid-column:1/-1;margin:0 0 12px">' + ic('info', 16) + '<div>Peran <b>Dekan, Wakil Dekan, Kaprodi, dan Sekprodi</b> tidak dipilih di sini: diberikan otomatis dari <a href="#/organisasi/struktural">jabatan struktural</a> aktif atau lewat <a href="#/organisasi/override">override peran</a>. Gunakan <b>Pimpinan</b> hanya untuk akun pimpinan yang tidak tertaut data dosen (hanya baca).</div></div>' +
         '<div class="field"><label>Email login</label><input class="input" id="u-email" type="email" value="' + esc(v.email || '') + '" placeholder="nama@trisakti.ac.id"><span class="hint">Boleh selain @trisakti.ac.id.</span></div>' +
         '<div class="field"><label>Nama tampilan</label><input class="input" id="u-nama" value="' + esc(v.nama || '') + '"></div>' +
         (u ? '<div class="field full"><label class="check"><input type="checkbox" id="u-aktif" ' + (v.aktif ? 'checked' : '') + '>Akun aktif</label></div>' : '<div class="alert-box blue standalone full" style="grid-column:1/-1">' + ic('info', 16) + '<div>Password sementara dibuat otomatis dan ditampilkan setelah disimpan.</div></div>') + '</div>',
@@ -423,7 +486,7 @@
   function renderPengaturan() {
     const d = PG.data;
     const tabs = [['aturan', 'Aturan kenaikan'], ['pensiun', 'Usia pensiun'], ['jenis', 'Jenis berkas'], ['penerima', 'Penerima email'], ['umum', 'Umum'], ['pemicu', 'Pemicu & email']];
-    let h = head('FR-14', 'Pengaturan Aturan & Sistem', 'Perubahan aturan langsung berlaku pada perhitungan status berikutnya untuk semua pengguna.');
+    let h = head('Pengaturan', 'Pengaturan Aturan & Sistem', 'Perubahan aturan langsung berlaku pada perhitungan status berikutnya untuk semua pengguna.');
     h += '<div class="tabs">' + tabs.map(t => '<button class="' + (PG.tab === t[0] ? 'on' : '') + '" data-t="' + t[0] + '">' + t[1] + '</button>').join('') + '</div><div id="pg"></div>';
     V().innerHTML = h;
     V().querySelectorAll('[data-t]').forEach(b => b.onclick = () => { PG.tab = b.dataset.t; renderPengaturan(); });
@@ -434,7 +497,7 @@
       const baris = a => '<tr><td>' + jabSel(a.dari, 'a-dari') + '</td><td>' + jabSel(a.ke, 'a-ke') + '</td><td><input class="input a-masa" type="number" min="0" max="240" value="' + esc(a.masa_min_bulan) + '"></td>' +
         '<td><input class="input a-bkd" type="number" min="0" max="20" value="' + esc(a.bkd_min_semester) + '"></td><td><select class="input a-pend">' + [['', 'Tidak ada'], ['S2', 'S2'], ['S3', 'S3']].map(o => '<option value="' + o[0] + '" ' + (String(a.pendidikan_min || '') === o[0] ? 'selected' : '') + '>' + o[1] + '</option>').join('') + '</select></td>' +
         '<td class="ctr"><input type="checkbox" class="a-aktif" ' + (String(a.aktif) === 'TRUE' || a.aktif === true ? 'checked' : '') + '></td><td><button class="btn btn-ghost btn-xs" data-rm>' + ic('trash', 14) + '</button></td></tr>';
-      el.innerHTML = '<div class="card"><div class="card-head"><div><h3>Aturan transisi jabatan (tab ATURAN)</h3><div class="sub">Bawaan PRD: masa 24 bulan; BKD TP→ASA 2 semester, lainnya 4; S3 wajib untuk L→LK dan LK→GB.</div></div><button class="btn btn-soft btn-sm" data-addrow>' + ic('plus', 14) + 'Tambah baris</button></div>' +
+      el.innerHTML = '<div class="card"><div class="card-head"><div><h3>Aturan transisi jabatan (tab ATURAN)</h3><div class="sub">Bawaan: masa 24 bulan; BKD TP→ASA 2 semester, lainnya 4; S3 wajib untuk L→LK dan LK→GB.</div></div><button class="btn btn-soft btn-sm" data-addrow>' + ic('plus', 14) + 'Tambah baris</button></div>' +
         '<div class="card-body"><div class="table-wrap"><table class="tbl etbl"><thead><tr><th>Dari</th><th>Ke</th><th>Masa min (bln)</th><th>BKD min (smt)</th><th>Pendidikan min</th><th class="ctr">Aktif</th><th></th></tr></thead><tbody id="rows">' +
         d.aturan.map(baris).join('') + '</tbody></table></div><div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-primary" data-save>Simpan aturan</button></div></div></div>';
       el.querySelector('[data-addrow]').onclick = () => { el.querySelector('#rows').insertAdjacentHTML('beforeend', baris({ dari: 'TP', ke: 'ASA', masa_min_bulan: 24, bkd_min_semester: 4, pendidikan_min: '', aktif: true })); bindRm(); };
@@ -443,7 +506,7 @@
       el.querySelector('[data-save]').onclick = e => simpanBagian(e.target, 'aturan', { rows: [...el.querySelectorAll('#rows tr')].map(tr => ({ dari: tr.querySelector('.a-dari').value, ke: tr.querySelector('.a-ke').value, masa_min_bulan: tr.querySelector('.a-masa').value, bkd_min_semester: tr.querySelector('.a-bkd').value, pendidikan_min: tr.querySelector('.a-pend').value, aktif: tr.querySelector('.a-aktif').checked })) });
     }
     if (PG.tab === 'pensiun') {
-      el.innerHTML = '<div class="card"><div class="card-head"><div><h3>Usia pensiun per jabatan (tab PENSIUN_ATURAN)</h3><div class="sub">PRD menetapkan nilai ini diisi admin. Kosongkan bila belum ditetapkan — dosen dengan jabatan tersebut tidak dihitung tanggal pensiunnya.</div></div></div>' +
+      el.innerHTML = '<div class="card"><div class="card-head"><div><h3>Usia pensiun per jabatan (tab PENSIUN_ATURAN)</h3><div class="sub">Nilai ini diisi admin. Kosongkan bila belum ditetapkan — dosen dengan jabatan tersebut tidak dihitung tanggal pensiunnya.</div></div></div>' +
         '<div class="card-body"><div class="table-wrap"><table class="tbl etbl"><thead><tr><th>Jabatan</th><th>Usia pensiun (tahun)</th></tr></thead><tbody>' +
         d.pensiun.map(p => '<tr data-j="' + esc(p.jabatan) + '"><td><b>' + esc(UI.jab(p.jabatan)) + '</b></td><td style="max-width:160px"><input class="input" type="number" min="50" max="80" value="' + esc(p.usia_pensiun) + '" placeholder="belum diisi"></td></tr>').join('') +
         '</tbody></table></div><div class="small muted" style="margin-top:10px">Jendela tampil pengingat diatur di tab Umum (saat ini ' + esc(d.umum.JENDELA_PENSIUN_BULAN.nilai) + ' bulan).</div><div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-primary" data-save>Simpan usia pensiun</button></div></div></div>';
@@ -466,13 +529,13 @@
       el.querySelector('[data-save]').onclick = e => simpanBagian(e.target, 'jenis_berkas', { rows: [...el.querySelectorAll('#rows tr')].map(tr => ({ kode: tr.querySelector('.j-kode').value.trim(), nama: tr.querySelector('.j-nama').value.trim(), sensitif: tr.querySelector('.j-sens').checked, aktif: tr.querySelector('.j-aktif').checked })) });
     }
     if (PG.tab === 'penerima') {
-      const baris = p => '<tr><td><select class="input p-peran">' + [['ADMIN', 'Admin'], ['KAPRODI', 'Kaprodi (cadangan)'], ['DEKAN', 'Dekan'], ['WD4', 'WD IV']].map(o => '<option value="' + o[0] + '" ' + (p.peran === o[0] ? 'selected' : '') + '>' + o[1] + '</option>').join('') + '</select></td>' +
+      const baris = p => '<tr><td><select class="input p-peran">' + [['ADMIN', 'Admin'], ['DEKAN', 'Dekan (cadangan)'], ['KAPRODI', 'Kaprodi (cadangan)'], ['LAINNYA', 'Tembusan tetap']].map(o => '<option value="' + o[0] + '" ' + (p.peran === o[0] ? 'selected' : '') + '>' + o[1] + '</option>').join('') + '</select></td>' +
         '<td><select class="input p-prodi"><option value="">—</option>' + (App.boot.prodi_master || []).map(x => '<option value="' + esc(x.id_prodi) + '" ' + (p.id_prodi === x.id_prodi ? 'selected' : '') + '>' + esc(x.label) + '</option>').join('') + '</select></td>' +
         '<td><input class="input p-nama" value="' + esc(p.nama || '') + '"></td><td><input class="input p-email" type="email" value="' + esc(p.email || '') + '"></td>' +
         '<td class="ctr"><input type="checkbox" class="p-aktif" ' + (String(p.aktif) === 'TRUE' || p.aktif === true ? 'checked' : '') + '></td><td><button class="btn btn-ghost btn-xs" data-rm>' + ic('trash', 14) + '</button></td></tr>';
-      const wd4 = String(d.umum.EMAIL_WD4_AKTIF.nilai) === 'TRUE';
-      el.innerHTML = '<div class="card"><div class="card-head"><div><h3>Penerima tembusan email pengingat (tab PENERIMA_EMAIL)</h3><div class="sub">Email H-6/H-3/H-1 dikirim ke dosen dengan tembusan Kaprodi prodi homebase-nya, Dekan, dan admin. <b>Email Kaprodi diambil otomatis dari jabatan struktural aktif</b>; baris Kaprodi di sini hanya cadangan bila prodi belum punya Kaprodi aktif.</div></div><button class="btn btn-soft btn-sm" data-addrow>' + ic('plus', 14) + 'Tambah penerima</button></div>' +
-        '<div class="card-body"><div class="alert-box ' + (wd4 ? 'green' : 'blue') + ' standalone">' + ic('info', 16) + '<div>WD IV saat ini <b>' + (wd4 ? 'diikutkan' : 'tidak diikutkan') + '</b> sebagai penerima. Ubah di tab Umum (EMAIL_WD4_AKTIF).</div></div>' +
+      const wd = String(d.umum.EMAIL_TEMBUSAN_WD.nilai || '').split(',').filter(Boolean);
+      el.innerHTML = '<div class="card"><div class="card-head"><div><h3>Penerima tembusan email pengingat (tab PENERIMA_EMAIL)</h3><div class="sub">Email H-6/H-3/H-1 dikirim ke dosen dengan tembusan Kaprodi prodi homebase-nya, Dekan, dan admin.</div></div><button class="btn btn-soft btn-sm" data-addrow>' + ic('plus', 14) + 'Tambah penerima</button></div>' +
+        '<div class="card-body"><div class="alert-box blue standalone">' + ic('info', 16) + '<div>Email <b>Dekan dan Kaprodi diambil otomatis dari jabatan struktural aktif</b>; baris "cadangan" hanya dipakai bila jabatan itu belum terisi. Wakil Dekan yang ditembuskan: <b>' + (wd.length ? wd.map(x => 'Wakil Dekan ' + ['I', 'II', 'III', 'IV'][+x.slice(2) - 1]).join(', ') : 'tidak ada') + '</b> (ubah di tab Umum).</div></div>' +
         '<div class="table-wrap"><table class="tbl etbl"><thead><tr><th>Peran</th><th>Prodi</th><th>Nama</th><th>Email</th><th class="ctr">Aktif</th><th></th></tr></thead><tbody id="rows">' + d.penerima.map(baris).join('') +
         '</tbody></table></div><div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-primary" data-save>Simpan penerima</button></div></div></div>';
       const bindRm = () => el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => b.closest('tr').remove());
@@ -481,15 +544,22 @@
       el.querySelector('[data-save]').onclick = e => simpanBagian(e.target, 'penerima', { rows: [...el.querySelectorAll('#rows tr')].map(tr => ({ peran: tr.querySelector('.p-peran').value, id_prodi: tr.querySelector('.p-prodi').value, nama: tr.querySelector('.p-nama').value, email: tr.querySelector('.p-email').value.trim(), aktif: tr.querySelector('.p-aktif').checked })) });
     }
     if (PG.tab === 'umum') {
-      const label = { JENDELA_PENSIUN_BULAN: 'Jendela pengingat pensiun (bulan)', JEDA_TB_BULAN: 'Jeda setelah tugas belajar (bulan)', BULAN_PER_SEMESTER: 'Bulan per semester (estimasi BKD)', FIELD_WAJIB_HITUNG: 'Kolom wajib hitung', WAJIB_NUPTK: 'NUPTK menjadi syarat', SESI_MENIT: 'Sesi login (menit tidak aktif)', EMAIL_WD4_AKTIF: 'Ikutkan WD IV di email pengingat', TANGGAL_RINGKASAN: 'Tanggal email ringkasan bulanan', URL_APLIKASI: 'URL frontend (untuk tombol di email)', VERSI_PRIVASI: 'Versi pemberitahuan privasi' };
-      const bool = ['WAJIB_NUPTK', 'EMAIL_WD4_AKTIF'];
+      const label = { JENDELA_PENSIUN_BULAN: 'Jendela pengingat pensiun (bulan)', JEDA_TB_BULAN: 'Jeda setelah tugas belajar (bulan)', BULAN_PER_SEMESTER: 'Bulan per semester (estimasi BKD)', FIELD_WAJIB_HITUNG: 'Kolom wajib hitung', WAJIB_NUPTK: 'NUPTK menjadi syarat', SESI_MENIT: 'Sesi login (menit tidak aktif)', EMAIL_TEMBUSAN_WD: 'Wakil Dekan yang ditembuskan email pengingat', TANGGAL_RINGKASAN: 'Tanggal email ringkasan bulanan', URL_APLIKASI: 'URL frontend (untuk tombol di email)', VERSI_PRIVASI: 'Versi pemberitahuan privasi' };
+      const bool = ['WAJIB_NUPTK'];
       el.innerHTML = '<form class="card card-pad" id="f-umum"><div class="form-grid">' + Object.keys(d.umum).map(k => {
         const it = d.umum[k];
+        if (k === 'EMAIL_TEMBUSAN_WD') {
+          const pilih = String(it.nilai || '').split(',');
+          return '<div class="field full"><label>' + esc(label[k]) + '</label><div style="display:flex;gap:16px;flex-wrap:wrap;padding:6px 0">' +
+            ['WD1', 'WD2', 'WD3', 'WD4'].map((w, i) => '<label class="check"><input type="checkbox" data-wd="' + w + '" ' + (pilih.indexOf(w) >= 0 ? 'checked' : '') + '>Wakil Dekan ' + ['I', 'II', 'III', 'IV'][i] + '</label>').join('') +
+            '</div><input type="hidden" name="EMAIL_TEMBUSAN_WD" value="' + esc(it.nilai || '') + '"><span class="hint">Email diambil dari pejabat Wakil Dekan yang aktif di Organisasi → Jabatan Struktural.</span></div>';
+        }
         const input = bool.indexOf(k) >= 0 ? '<select class="input" name="' + k + '"><option value="TRUE" ' + (it.nilai === 'TRUE' ? 'selected' : '') + '>Ya</option><option value="FALSE" ' + (it.nilai !== 'TRUE' ? 'selected' : '') + '>Tidak</option></select>'
           : '<input class="input" name="' + k + '" value="' + esc(it.nilai) + '"' + (k === 'URL_APLIKASI' ? ' placeholder="' + esc(location.origin + location.pathname) + '"' : '') + '>';
         return '<div class="field ' + (k === 'URL_APLIKASI' || k === 'FIELD_WAJIB_HITUNG' ? 'full' : '') + '"><label>' + esc(label[k] || k) + '</label>' + input + '<span class="hint">' + esc(it.keterangan) + '</span></div>';
       }).join('') + '</div><div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn btn-outline" type="button" data-url>Isi URL halaman ini</button><button class="btn btn-primary" type="submit">Simpan</button></div></form>';
       el.querySelector('[data-url]').onclick = () => { el.querySelector('[name=URL_APLIKASI]').value = location.origin + location.pathname; };
+      el.querySelectorAll('[data-wd]').forEach(c => c.onchange = () => { el.querySelector('[name=EMAIL_TEMBUSAN_WD]').value = [...el.querySelectorAll('[data-wd]:checked')].map(x => x.dataset.wd).join(','); });
       el.querySelector('#f-umum').onsubmit = e => { e.preventDefault(); const nilai = {}; e.target.querySelectorAll('[name]').forEach(i => nilai[i.name] = i.value.trim()); simpanBagian(e.target.querySelector('[type=submit]'), 'umum', { nilai }); };
     }
     if (PG.tab === 'pemicu') {
@@ -547,7 +617,7 @@
   }
   function renderLog() {
     const d = LG.data;
-    let h = head('FR-15', 'Log & Audit', 'Riwayat email pengingat (EMAIL_LOG) dan aktivitas pengguna (AUDIT_LOG). Menampilkan maksimal 300/500 entri terbaru sesuai filter.',
+    let h = head('Riwayat', 'Log & Audit', 'Riwayat email pengingat (EMAIL_LOG) dan aktivitas pengguna (AUDIT_LOG). Menampilkan maksimal 300/500 entri terbaru sesuai filter.',
       '<button class="btn btn-outline" data-csv>' + ic('download', 16) + 'Ekspor CSV</button>');
     h += '<div class="tabs">' + [['email', 'Email pengingat'], ['audit', 'Audit aktivitas']].map(t => '<button class="' + (LG.tab === t[0] ? 'on' : '') + '" data-t="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>';
     const filterTgl = '<input class="input" type="date" id="l-dari" value="' + esc(LG.dari) + '" title="Dari tanggal" style="width:auto"><input class="input" type="date" id="l-sampai" value="' + esc(LG.sampai) + '" title="Sampai tanggal" style="width:auto">';

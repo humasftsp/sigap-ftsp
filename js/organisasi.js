@@ -1,6 +1,6 @@
 /**
- * SIGAP FTSP — organisasi.js (PRD v1.3)
- * Program Studi (FR-28), Homebase Dosen (FR-27), Jabatan Struktural (FR-19), Override Peran (FR-02).
+ * SIGAP FTSP — organisasi.js
+ * Program Studi, Homebase Dosen, Jabatan Struktural (pimpinan fakultas & prodi), Override Peran.
  * Juga dipakai tab "Homebase & Struktural" di detail dosen.
  */
 (function () {
@@ -8,7 +8,8 @@
   const Pages = window.Pages = window.Pages || {};
   const V = () => App.view;
   const JENJANG = ['D3', 'D4', 'S1', 'S2', 'S3', 'Profesi'];
-  const LABEL_STR = { KAPRODI: 'Kaprodi', SEKPRODI: 'Sekprodi', LAINNYA: 'Lainnya' };
+  const LABEL_STR = { DEKAN: 'Dekan', WD1: 'Wakil Dekan I', WD2: 'Wakil Dekan II', WD3: 'Wakil Dekan III', WD4: 'Wakil Dekan IV', KAPRODI: 'Kaprodi', SEKPRODI: 'Sekprodi', LAINNYA: 'Lainnya' };
+  const FAKULTAS = ['DEKAN', 'WD1', 'WD2', 'WD3', 'WD4'];
   const TAB = [
     ['prodi', 'Program Studi', 'building'],
     ['homebase', 'Homebase Dosen', 'users'],
@@ -44,10 +45,10 @@
     const desk = {
       prodi: 'Daftar program studi menjadi pilihan homebase, jabatan struktural, override peran, dan filter laporan. Prodi yang masih dipakai tidak dapat dinonaktifkan.',
       homebase: 'Homebase adalah prodi induk dosen dan dasar semua pengelompokan per prodi. Setiap perubahan wajib memuat tanggal berlaku dan alasan; riwayat tidak boleh tumpang tindih.',
-      struktural: 'Kaprodi dan Sekprodi aktif otomatis mendapat akses pantau dosen berhomebase di prodi yang dipimpinnya. Tidak boleh ada dua Kaprodi (atau Sekprodi) aktif untuk satu prodi pada tanggal yang sama.',
+      struktural: 'Pimpinan fakultas (Dekan, Wakil Dekan I–IV) dan pimpinan prodi (Kaprodi, Sekprodi) beserta periodenya. Pejabat yang aktif otomatis mendapat akses: Dekan dan Wakil Dekan memantau seluruh dosen, Kaprodi/Sekprodi memantau dosen berhomebase di prodinya. Satu jabatan hanya boleh dipegang satu orang pada tanggal yang sama.',
       override: 'Beri atau cabut peran secara manual di luar jabatan struktural. Setiap override wajib beralasan dan bertanggal berakhir agar tidak terlupa dicabut.'
     }[tab];
-    let h = '<div class="page-head"><div><div class="eyebrow">Organisasi · PRD v1.3</div><h1>' + esc(t[1]) + '</h1><p>' + desk + '</p></div><div class="actions" id="org-aksi"></div></div>' +
+    let h = '<div class="page-head"><div><div class="eyebrow">Organisasi</div><h1>' + esc(t[1]) + '</h1><p>' + desk + '</p></div><div class="actions" id="org-aksi"></div></div>' +
       '<div class="tabs" role="tablist">' + TAB.map(x => '<a role="tab" class="' + (x[0] === tab ? 'on' : '') + '" href="#/organisasi/' + x[0] + '">' + ic(x[2], 15) + x[1] +
         (x[0] === 'homebase' && ORG.homebase.filter(d => !d.id_prodi).length ? '<span class="n warn">' + ORG.homebase.filter(d => !d.id_prodi).length + '</span>' : '') +
         (x[0] === 'override' && ORG.override.filter(o => o.berlaku).length ? '<span class="n">' + ORG.override.filter(o => o.berlaku).length + '</span>' : '') + '</a>').join('') + '</div><div id="org-isi"></div>';
@@ -234,32 +235,65 @@
   // JABATAN STRUKTURAL
   // ============================================================
   const STR = { filter: 'berlaku' };
+  const ROMAWI = { WD1: 'I', WD2: 'II', WD3: 'III', WD4: 'IV' };
+  function statusBadge(s) { return s.berlaku ? '<span class="badge b-ready">Aktif</span>' : s.akan_datang ? '<span class="badge b-short">Akan datang</span>' : '<span class="badge b-gray">Selesai</span>'; }
+  function namaPejabat(s) { return s.id_dosen ? '<a href="#/dosen/' + esc(s.id_dosen) + '?tab=homebase"><b>' + esc(s.nama_dosen) + '</b></a>' : '<b>' + esc(s.nama_dosen) + '</b> <span class="badge b-gray" title="Tidak tertaut data dosen">luar data</span>'; }
+
   function tabStruktural() {
     const el = V().querySelector('#org-isi');
-    const today = ORG.hari_ini;
     const aktifProdi = ORG.prodi.filter(p => p.aktif);
-    const pemegang = (id, jab) => ORG.struktural.filter(s => s.berlaku && s.id_prodi === id && s.jabatan === jab)[0];
-    let h = '<div class="dcards mb" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">' + aktifProdi.map(p => {
+    const pemegang = (id, jab) => ORG.struktural.filter(s => s.berlaku && String(s.id_prodi || '') === String(id || '') && s.jabatan === jab)[0];
+
+    // 1) Pimpinan fakultas saat ini
+    let h = '<div class="card mb"><div class="card-head"><div><h3>' + ic('building', 18) + 'Pimpinan Fakultas saat ini</h3><div class="sub">Dekan dan Wakil Dekan yang sedang menjabat</div></div></div>' +
+      '<div class="card-body"><div class="pimpinan-grid">' + FAKULTAS.map(j => {
+        const x = pemegang('', j);
+        return '<div class="pimpinan ' + (x ? '' : 'kosong') + '"><div class="pj">' + LABEL_STR[j] + '</div>' +
+          (x ? '<div class="pn">' + esc(x.nama_dosen) + '</div><div class="ps">' + periode(x.tgl_mulai, x.tgl_selesai) + '</div>'
+            : '<div class="pn" style="color:var(--inc-tx)">Belum diisi</div><div class="ps"><a href="#" data-isi="' + j + '">Isi sekarang</a></div>') + '</div>';
+      }).join('') + '</div></div></div>';
+
+    // 2) Pimpinan prodi
+    h += '<div class="dcards mb" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">' + aktifProdi.map(p => {
       const k = pemegang(p.id_prodi, 'KAPRODI'), s = pemegang(p.id_prodi, 'SEKPRODI');
       const baris = (lbl, x) => '<div class="syr"><span class="k"><span class="' + (x ? 'ok' : 'bad') + '">' + ic(x ? 'checkCircle' : 'alertCircle', 15) + '</span><span>' + lbl + '</span></span><span class="v" style="max-width:62%;overflow:hidden;text-overflow:ellipsis" title="' + esc(x ? x.nama_dosen : '') + '">' + (x ? esc(x.nama_dosen) : '<span style="color:var(--inc-tx)">Belum ada</span>') + '</span></div>';
       return '<div class="card card-pad"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b style="color:var(--navy)">' + esc(p.label) + '</b><span class="badge b-blue">' + p.jumlah_dosen + ' dosen</span></div>' +
         '<div style="display:grid;gap:6px">' + baris('Kaprodi', k) + baris('Sekprodi', s) + '</div>' +
         (k && k.tgl_selesai ? '<div class="small muted" style="margin-top:8px">Periode Kaprodi s.d. ' + fmtTgl(k.tgl_selesai) + '</div>' : '') + '</div>';
     }).join('') + '</div>';
+
+    // 3) Riwayat Dekan & Wakil Dekan per periode
+    const fak = ORG.struktural.filter(s => s.fakultas).sort((a, b) => String(b.tgl_mulai).localeCompare(String(a.tgl_mulai)));
+    h += '<div class="card mb"><div class="card-head"><div><h3>' + ic('history', 18) + 'Riwayat Dekan & Wakil Dekan</h3><div class="sub">Pejabat terdahulu boleh dicatat walau tidak ada di data dosen (pilih "Pejabat di luar data dosen").</div></div>' +
+      '<button class="btn btn-soft btn-sm" data-tambah-fak>' + ic('plus', 14) + 'Tambah riwayat pimpinan</button></div>';
+    if (fak.length) {
+      const per = {};
+      fak.forEach(s => { const k = String(s.tgl_mulai).slice(0, 4) + '–' + (s.tgl_selesai ? String(s.tgl_selesai).slice(0, 4) : 'sekarang'); (per[k] = per[k] || []).push(s); });
+      h += '<div class="table-wrap" style="margin-top:8px"><table class="tbl tbl-cards"><thead><tr><th>Periode</th>' + FAKULTAS.map(j => '<th>' + LABEL_STR[j] + '</th>').join('') + '</tr></thead><tbody>' +
+        Object.keys(per).map(k => '<tr><td class="nowrap"><b>' + k + '</b></td>' + FAKULTAS.map(j => {
+          const x = per[k].filter(s => s.jabatan === j);
+          return '<td data-l="' + LABEL_STR[j] + '" class="small">' + (x.length ? x.map(s => esc(s.nama_dosen) + (s.berlaku ? ' <span class="badge b-ready">Aktif</span>' : '')).join('<br>') : '<span class="muted">—</span>') + '</td>';
+        }).join('') + '</tr>').join('') + '</tbody></table></div>';
+    } else h += '<div class="card-body">' + UI.empty('history', 'Belum ada riwayat pimpinan fakultas', 'Catat Dekan dan Wakil Dekan beserta periodenya agar dapat dijawab siapa pimpinan pada tahun tertentu.') + '</div>';
+    h += '</div>';
+
+    // 4) Semua baris jabatan
     let l = ORG.struktural;
     if (STR.filter === 'berlaku') l = l.filter(s => s.berlaku || s.akan_datang);
     h += '<div class="toolbar"><div class="seg" id="st-f"><button class="' + (STR.filter === 'berlaku' ? 'on' : '') + '" data-v="berlaku">Aktif & akan datang</button><button class="' + (STR.filter === 'semua' ? 'on' : '') + '" data-v="semua">Semua riwayat</button></div>' +
-      '<span class="muted small">Riwayat disimpan sehingga dapat dijawab siapa Kaprodi pada tahun tertentu.</span></div>';
-    h += '<div class="card">' + (l.length ? '<div class="table-wrap"><table class="tbl tbl-cards"><thead><tr><th>Dosen</th><th>Jabatan</th><th>Prodi</th><th>Periode</th><th>No. SK</th><th>Status</th><th></th></tr></thead><tbody>' +
-      l.map(s => '<tr><td><a href="#/dosen/' + esc(s.id_dosen) + '?tab=homebase"><b>' + esc(s.nama_dosen) + '</b></a></td><td data-l="Jabatan">' + esc(s.label) + '</td><td data-l="Prodi">' + esc(s.prodi || '—') + '</td>' +
+      '<span class="muted small">Riwayat disimpan sehingga dapat dijawab siapa pejabat pada tahun tertentu.</span></div>';
+    h += '<div class="card">' + (l.length ? '<div class="table-wrap"><table class="tbl tbl-cards"><thead><tr><th>Pejabat</th><th>Jabatan</th><th>Prodi</th><th>Periode</th><th>No. SK</th><th>Status</th><th></th></tr></thead><tbody>' +
+      l.map(s => '<tr><td>' + namaPejabat(s) + '</td><td data-l="Jabatan">' + esc(s.label) + '</td><td data-l="Prodi">' + esc(s.prodi || (s.fakultas ? 'Fakultas' : '—')) + '</td>' +
         '<td data-l="Periode" class="nowrap">' + periode(s.tgl_mulai, s.tgl_selesai) + '</td><td data-l="No. SK" class="small">' + esc(s.no_sk || '—') + '</td>' +
-        '<td data-l="Status">' + (s.berlaku ? '<span class="badge b-ready">Aktif</span>' : s.akan_datang ? '<span class="badge b-short">Akan datang</span>' : '<span class="badge b-gray">Selesai</span>') + '</td>' +
+        '<td data-l="Status">' + statusBadge(s) + '</td>' +
         '<td class="num nowrap"><button class="btn btn-ghost btn-xs" data-edit="' + esc(s.id_jabatan) + '">' + ic('edit', 14) + 'Ubah</button><button class="btn btn-ghost btn-xs" data-hapus="' + esc(s.id_jabatan) + '" title="Hapus">' + ic('trash', 14) + '</button></td></tr>').join('') +
-      '</tbody></table></div>' : UI.empty('award', 'Belum ada jabatan struktural', 'Tambahkan Kaprodi dan Sekprodi tiap prodi agar akses pantau dan email pengingat Kaprodi berjalan otomatis.')) + '</div>';
+      '</tbody></table></div>' : UI.empty('award', 'Belum ada jabatan struktural', 'Tambahkan Dekan, Wakil Dekan, Kaprodi, dan Sekprodi agar akses pantau dan email pengingat berjalan otomatis.')) + '</div>';
     el.innerHTML = h;
     V().querySelector('#org-aksi').innerHTML = '<button class="btn btn-primary" data-tambah>' + ic('plus', 16) + 'Tambah jabatan</button>';
     const selesai = async () => { await segarkan(); render('struktural'); };
     V().querySelector('[data-tambah]').onclick = () => Pages.formStruktural({}, selesai);
+    el.querySelector('[data-tambah-fak]').onclick = () => Pages.formStruktural({ jabatan: 'DEKAN', luar: true, tgl_mulai: '' }, selesai);
+    el.querySelectorAll('[data-isi]').forEach(a => a.onclick = e => { e.preventDefault(); Pages.formStruktural({ jabatan: a.dataset.isi }, selesai); });
     el.querySelectorAll('#st-f button').forEach(b => b.onclick = () => { STR.filter = b.dataset.v; tabStruktural(); });
     el.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => Pages.formStruktural(ORG.struktural.find(s => s.id_jabatan === b.dataset.edit), selesai));
     el.querySelectorAll('[data-hapus]').forEach(b => b.onclick = async () => {
@@ -271,25 +305,36 @@
 
   Pages.formStruktural = async function (rec, onDone) {
     const v = Object.assign({ jabatan: 'KAPRODI', tgl_mulai: App.hariIni() }, rec || {});
-    const dosen = (await App.muatDosen()).filter(d => d.aktif).sort((a, b) => a.nama.localeCompare(b.nama));
+    const luar = !!(v.luar || (v.id_jabatan && !v.id_dosen && v.nama_pejabat));
+    const dosen = (await App.muatDosen()).filter(d => d.aktif && !d.contoh).sort((a, b) => a.nama.localeCompare(b.nama));
+    const grup = (lbl, keys) => '<optgroup label="' + lbl + '">' + keys.map(k => '<option value="' + k + '" ' + (v.jabatan === k ? 'selected' : '') + '>' + LABEL_STR[k] + '</option>').join('') + '</optgroup>';
     const m = UI.modal({
       title: v.id_jabatan ? 'Ubah jabatan struktural' : 'Tambah jabatan struktural',
-      body: '<div class="form-grid"><div class="field full"><label>Dosen *</label><select class="input" id="js-d" ' + (v.id_jabatan ? 'disabled' : '') + '><option value="">— pilih dosen —</option>' +
-        dosen.map(d => '<option value="' + esc(d.id_dosen) + '" ' + (v.id_dosen === d.id_dosen ? 'selected' : '') + '>' + esc(d.nama) + ' · ' + esc(d.prodi || 'tanpa homebase') + '</option>').join('') + '</select></div>' +
-        '<div class="field"><label>Jabatan *</label><select class="input" id="js-j">' + Object.keys(LABEL_STR).map(k => '<option value="' + k + '" ' + (v.jabatan === k ? 'selected' : '') + '>' + LABEL_STR[k] + '</option>').join('') + '</select></div>' +
+      body: '<div class="form-grid"><div class="field"><label>Jabatan *</label><select class="input" id="js-j">' + grup('Pimpinan fakultas', FAKULTAS) + grup('Pimpinan prodi', ['KAPRODI', 'SEKPRODI']) + grup('Lainnya', ['LAINNYA']) + '</select></div>' +
         '<div class="field" id="js-nw"><label>Nama jabatan *</label><input class="input" id="js-n" value="' + esc(v.nama_jabatan || '') + '" placeholder="mis. Kepala Laboratorium Struktur"></div>' +
         '<div class="field" id="js-pw"><label>Prodi *</label><select class="input" id="js-p"><option value="">— pilih —</option>' + opsiProdi(v.id_prodi, !!v.id_jabatan) + '</select><span class="hint">Ruang lingkup pantau mengikuti prodi ini, bukan homebase pribadi.</span></div>' +
+        '<div class="field full"><label class="check"><input type="checkbox" id="js-luar" ' + (luar ? 'checked' : '') + ' ' + (v.id_jabatan && v.id_dosen ? 'disabled' : '') + '>Pejabat di luar data dosen (mis. pejabat terdahulu yang sudah pensiun)</label></div>' +
+        '<div class="field full" id="js-dw"><label>Dosen *</label><select class="input" id="js-d" ' + (v.id_jabatan && v.id_dosen ? 'disabled' : '') + '><option value="">— pilih dosen —</option>' +
+        dosen.map(d => '<option value="' + esc(d.id_dosen) + '" ' + (v.id_dosen === d.id_dosen ? 'selected' : '') + '>' + esc(d.nama) + ' · ' + esc(d.prodi || 'tanpa homebase') + '</option>').join('') + '</select></div>' +
+        '<div class="field full" id="js-lw"><label>Nama pejabat *</label><input class="input" id="js-np" value="' + esc(v.nama_pejabat || '') + '" placeholder="Nama lengkap dan gelar"><span class="hint">Pejabat di luar data dosen tidak mendapat akses aplikasi; hanya tercatat di riwayat.</span></div>' +
         '<div class="field"><label>Tanggal mulai *</label><input class="input" type="date" id="js-m" value="' + esc(v.tgl_mulai || '') + '"></div>' +
-        '<div class="field"><label>Tanggal selesai</label><input class="input" type="date" id="js-s" value="' + esc(v.tgl_selesai || '') + '"><span class="hint">Isi untuk mengakhiri jabatan; kosong = masih menjabat.</span></div>' +
+        '<div class="field"><label>Tanggal selesai</label><input class="input" type="date" id="js-s" value="' + esc(v.tgl_selesai || '') + '"><span class="hint">Kosong = masih menjabat.</span></div>' +
         '<div class="field full"><label>No. SK</label><input class="input" id="js-sk" value="' + esc(v.no_sk || '') + '"></div></div>',
       foot: '<button class="btn btn-outline" data-close>Batal</button><button class="btn btn-primary" data-ok>Simpan</button>'
     });
-    const sync = () => { const j = m.$('#js-j').value; m.$('#js-nw').classList.toggle('hide', j !== 'LAINNYA'); };
-    m.$('#js-j').onchange = sync; sync();
+    const sync = () => {
+      const j = m.$('#js-j').value, l = m.$('#js-luar').checked;
+      m.$('#js-nw').classList.toggle('hide', j !== 'LAINNYA');
+      m.$('#js-pw').classList.toggle('hide', j !== 'KAPRODI' && j !== 'SEKPRODI');
+      m.$('#js-dw').classList.toggle('hide', l);
+      m.$('#js-lw').classList.toggle('hide', !l);
+    };
+    m.$('#js-j').onchange = sync; m.$('#js-luar').onchange = sync; sync();
     m.$('[data-ok]').onclick = async e => {
+      const l = m.$('#js-luar').checked, j = m.$('#js-j').value;
       const r = await UI.sibuk(e.target, () => API.call('saveStruktural', { jabatan: {
-        id_jabatan: v.id_jabatan || '', id_dosen: m.$('#js-d').value || v.id_dosen, jabatan: m.$('#js-j').value, nama_jabatan: m.$('#js-n').value,
-        id_prodi: m.$('#js-p').value, tgl_mulai: m.$('#js-m').value, tgl_selesai: m.$('#js-s').value, no_sk: m.$('#js-sk').value } }));
+        id_jabatan: v.id_jabatan || '', id_dosen: l ? '' : (m.$('#js-d').value || v.id_dosen || ''), nama_pejabat: l ? m.$('#js-np').value : '', jabatan: j, nama_jabatan: m.$('#js-n').value,
+        id_prodi: (j === 'KAPRODI' || j === 'SEKPRODI') ? m.$('#js-p').value : '', tgl_mulai: m.$('#js-m').value, tgl_selesai: m.$('#js-s').value, no_sk: m.$('#js-sk').value } }));
       m.close(); UI.toast(r.message); App.invalidasi(); if (onDone) onDone();
     };
   };
@@ -300,7 +345,7 @@
   function tabOverride() {
     const el = V().querySelector('#org-isi');
     const l = ORG.override.slice().sort((a, b) => (b.berlaku - a.berlaku) || String(a.tgl_berakhir).localeCompare(String(b.tgl_berakhir)));
-    let h = '<div class="alert-box blue standalone">' + ic('shield', 16) + '<div><b>Kapan memakai override?</b>Misalnya Kaprodi cuti dan tugasnya dirangkap dosen lain (Beri Kaprodi), atau akses Kaprodi perlu dicabut sementara (Cabut Kaprodi). Peran Admin tidak dapat diberikan lewat override. Sistem mengingatkan admin 14 hari sebelum override berakhir.</div></div>';
+    let h = '<div class="alert-box blue standalone">' + ic('shield', 16) + '<div><b>Kapan memakai override?</b>Misalnya Kaprodi cuti dan tugasnya dirangkap dosen lain (Beri Kaprodi), atau akses perlu dicabut sementara (Cabut). Untuk Dekan/Wakil Dekan definitif, catat di Jabatan Struktural, bukan di sini. Peran Admin tidak dapat diberikan lewat override. Sistem mengingatkan admin 14 hari sebelum override berakhir.</div></div>';
     h += '<div class="card">' + (l.length ? '<div class="table-wrap"><table class="tbl tbl-cards"><thead><tr><th>Pengguna</th><th>Override</th><th>Periode</th><th>Sisa</th><th>Alasan</th><th></th></tr></thead><tbody>' +
       l.map(o => '<tr><td><div class="pn"><b>' + esc(o.nama) + '</b></div><div class="small muted">' + esc(o.email) + '</div></td>' +
         '<td data-l="Override"><span class="badge ' + (o.aksi === 'BERI' ? 'b-ready' : 'b-inc') + '">' + (o.aksi === 'BERI' ? 'Beri' : 'Cabut') + '</span> <b>' + esc(App.roleLabel(o.peran)) + '</b>' + (o.prodi ? ' · ' + esc(o.prodi) : '') + '</td>' +
@@ -325,7 +370,7 @@
       body: '<div class="form-grid"><div class="field full"><label>Akun *</label><select class="input" id="ov-e"><option value="">— pilih akun —</option>' +
         ORG.akun.slice().sort((a, b) => String(a.nama).localeCompare(String(b.nama))).map(a => '<option value="' + esc(a.email) + '">' + esc(a.nama) + ' · ' + esc(a.email) + '</option>').join('') + '</select></div>' +
         '<div class="field"><label>Aksi *</label><select class="input" id="ov-a"><option value="BERI">Beri peran</option><option value="CABUT">Cabut peran</option></select></div>' +
-        '<div class="field"><label>Peran *</label><select class="input" id="ov-p">' + ['KAPRODI', 'SEKPRODI', 'DEKAN', 'WD4'].map(p => '<option value="' + p + '">' + App.roleLabel(p) + '</option>').join('') + '</select></div>' +
+        '<div class="field"><label>Peran *</label><select class="input" id="ov-p">' + ['KAPRODI', 'SEKPRODI', 'DEKAN', 'WAKIL_DEKAN'].map(p => '<option value="' + p + '">' + App.roleLabel(p) + '</option>').join('') + '</select></div>' +
         '<div class="field full" id="ov-prw"><label>Prodi</label><select class="input" id="ov-pr"><option value="">— semua prodi (khusus Cabut) —</option>' + opsiProdi('') + '</select></div>' +
         '<div class="field"><label>Mulai *</label><input class="input" type="date" id="ov-m" value="' + esc(App.hariIni()) + '"></div>' +
         '<div class="field"><label>Berakhir *</label><input class="input" type="date" id="ov-b"><span class="hint">Wajib, agar override tidak terlupa dicabut.</span></div>' +

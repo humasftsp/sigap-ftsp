@@ -1,6 +1,6 @@
 /**
  * SIGAP FTSP — cetak.js
- * Cetak rekap (FR-13): PDF lewat dialog cetak browser ("Simpan sebagai PDF"),
+ * Cetak rekap: PDF lewat dialog cetak browser ("Simpan sebagai PDF"),
  * Word lewat dokumen HTML ber-ekstensi .doc yang dibuka langsung oleh MS Word.
  * Layout memakai <table> (bukan flex) agar tampil sama di Word.
  */
@@ -120,7 +120,7 @@
         ['Tanggal lahir', fmtTgl(d.tgl_lahir, true)], ['Serdos', esc(d.serdos || '—')], ['BKD berturut', esc(d.bkd_semester !== '' ? d.bkd_semester + ' semester' : '—')]
       ].map(x => baris(x[0], x[1])).join('') + '</tbody></table>';
       isi += '<h2>Jabatan & Kelayakan</h2><table class="data"><tbody>' + [
-        ['Jabatan saat ini', esc(st.jabatan_label) + ' (TMT ' + fmtTgl(Pages.tmtAcuan(d), true) + (d.no_sk_jabatan ? ', SK ' + esc(d.no_sk_jabatan) : '') + ')'],
+        ['Status dosen', esc(d.status_dosen || 'Aktif')], ['Jabatan saat ini', esc(Pages.jabatanKini(d) || 'Dosen')], ['Jabatan akademik', esc(st.jabatan_label) + ' (TMT ' + fmtTgl(Pages.tmtAcuan(d), true) + (d.no_sk_jabatan ? ', SK ' + esc(d.no_sk_jabatan) : '') + ')'],
         ['Target berikutnya', esc(st.target_label || '—')], ['Tanggal eligible efektif', tglElig(st)], ['Status', '<b>' + esc(kolStatus(st.status)) + '</b>'],
         ['Alasan', esc((st.alasan || []).join('; '))], ['Status pengusulan', esc(d.status_pengusulan || 'Belum') + (d.tgl_pengusulan ? ' (' + fmtTgl(d.tgl_pengusulan) + ')' : '')]
       ].map(x => baris(x[0], x[1])).join('') + '</tbody></table>';
@@ -182,7 +182,7 @@
     ];
     const prodiList = App.lihatSemua() ? App.boot.prodi : App.prodiPimpinan();
     const dosenOpt = App.dosenAktif().filter(d => App.dalamLingkup(d) || d.id_dosen === App.user.id_dosen).slice().sort((a, b) => a.nama.localeCompare(b.nama));
-    let h = '<div class="page-head"><div><div class="eyebrow">FR-13</div><h1>Cetak & Rekap</h1><p>Pilih jenis rekap dan filter. PDF dibuat lewat dialog cetak browser — pilih <b>Simpan sebagai PDF</b>. Word diunduh sebagai berkas .doc.</p></div></div>';
+    let h = '<div class="page-head"><div><div class="eyebrow">Laporan</div><h1>Cetak & Rekap</h1><p>Pilih jenis rekap dan filter. PDF dibuat lewat dialog cetak browser — pilih <b>Simpan sebagai PDF</b>. Word diunduh sebagai berkas .doc.</p></div></div>';
     h += '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));margin-bottom:18px">' + pilihan.map(p =>
       '<button class="card kpi click ' + (CTK.jenis === p[0] ? '' : '') + '" data-j="' + p[0] + '" style="text-align:left;' + (CTK.jenis === p[0] ? 'border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,102,204,.15)' : '') + '">' +
       '<div class="k-top"><div class="k-title">' + p[1] + '</div><div class="k-ico">' + ic(p[3], 18) + '</div></div><div class="k-desc" style="display:block">' + p[2] + '</div></button>').join('') + '</div>';
@@ -198,7 +198,7 @@
     } else {
       h += '<div class="toolbar"><div style="flex:1"></div><button class="btn btn-outline" data-word>' + ic('file', 16) + 'Unduh Word</button><button class="btn btn-primary" data-pdf>' + ic('printer', 16) + 'Cetak / PDF</button></div>';
     }
-    h += '<div class="card" style="padding:12px;background:#E9EEF5"><div class="lbl" style="margin:0 4px 8px">PRATINJAU</div><iframe id="c-prev" title="Pratinjau dokumen" style="width:100%;height:72vh;border:0;border-radius:8px;background:#fff;box-shadow:var(--sh-2)"></iframe></div>';
+    h += '<div class="card" style="padding:12px;background:var(--hover)"><div class="lbl" style="margin:0 4px 8px">PRATINJAU</div><iframe id="c-prev" title="Pratinjau dokumen" style="width:100%;height:72vh;border:0;border-radius:8px;background:#fff;box-shadow:var(--sh-2)"></iframe></div>';
     V().innerHTML = h;
 
     V().querySelectorAll('[data-j]').forEach(b => b.onclick = () => { CTK.jenis = b.dataset.j; render(); });

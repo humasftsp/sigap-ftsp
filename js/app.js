@@ -6,8 +6,9 @@
   const { ic, esc } = UI;
   const C = window.SIGAP_CONFIG || {};
 
-  const ROLE_LABEL = { ADMIN: 'Admin Fakultas', DOSEN: 'Dosen', KAPRODI: 'Kaprodi', SEKPRODI: 'Sekprodi', DEKAN: 'Dekan', WD4: 'Wakil Dekan IV', LAINNYA: 'Jabatan lain' };
-  const PIMPINAN = ['ADMIN', 'KAPRODI', 'SEKPRODI', 'DEKAN', 'WD4'];
+  const ROLE_LABEL = { ADMIN: 'Admin Fakultas', DOSEN: 'Dosen', PIMPINAN: 'Pimpinan Fakultas', KAPRODI: 'Kaprodi', SEKPRODI: 'Sekprodi', DEKAN: 'Dekan', WAKIL_DEKAN: 'Wakil Dekan', LAINNYA: 'Jabatan lain',
+    WD1: 'Wakil Dekan I', WD2: 'Wakil Dekan II', WD3: 'Wakil Dekan III', WD4: 'Wakil Dekan IV' };
+  const PIMPINAN = ['ADMIN', 'PIMPINAN', 'DEKAN', 'WAKIL_DEKAN', 'KAPRODI', 'SEKPRODI'];
 
   const App = {
     boot: null,
@@ -15,17 +16,18 @@
     dosenAt: 0,
     get user() { return API.sesi && API.sesi.user; },
     get role() { return this.user ? this.user.role : ''; },
-    /** Peran efektif (PRD §3): peran dasar + Kaprodi/Sekprodi dari jabatan struktural + override. */
+    /** Peran efektif: peran dasar + Dekan/Wakil Dekan/Kaprodi/Sekprodi dari jabatan struktural + override. */
     get peran() { return this.user ? (this.user.peran || [this.user.role]) : []; },
     punya(p) { return this.peran.indexOf(p) >= 0; },
     punyaSalah(list) { return this.peran.some(p => list.indexOf(p) >= 0); },
     isAdmin() { return this.punya('ADMIN'); },
-    lihatSemua() { return this.punyaSalah(['ADMIN', 'DEKAN', 'WD4']); },
+    lihatSemua() { return this.punyaSalah(['ADMIN', 'PIMPINAN', 'DEKAN', 'WAKIL_DEKAN']); },
     prodiPimpinan() { return ((this.user && this.user.prodi_pimpinan) || []).map(p => p.label); },
     pimpinan() { return this.lihatSemua() || this.prodiPimpinan().length > 0; },
     dosenSaja() { return !this.pimpinan(); },
     /** Dosen yang menjadi lingkup pemantauan peran ini (Kaprodi: homebase prodinya, tanpa dirinya sendiri bila beda prodi). */
     dalamLingkup(d) {
+      if (d.contoh) return d.id_dosen === (App.user && App.user.id_dosen); // data contoh tidak dihitung
       if (App.lihatSemua()) return true;
       const ids = ((App.user && App.user.prodi_pimpinan) || []).map(p => p.id_prodi);
       return ids.length ? ids.indexOf(d.id_prodi_homebase) >= 0 : d.id_dosen === (App.user && App.user.id_dosen);
@@ -34,10 +36,12 @@
     /** Label peran untuk sidebar, mis. "Kaprodi S1 Teknik Sipil · Dosen". */
     labelPeran() {
       const u = this.user || {};
-      return this.peran.map(p => {
+      const jab = (u.jabatan_struktural || []).filter(j => j.jabatan !== 'LAINNYA').map(j => j.label);
+      const lain = this.peran.filter(p => ['DEKAN', 'WAKIL_DEKAN', 'KAPRODI', 'SEKPRODI'].indexOf(p) < 0 || !jab.length).map(p => {
         if (p === 'KAPRODI' || p === 'SEKPRODI') return ROLE_LABEL[p] + ' ' + (u.prodi_pimpinan || []).filter(x => x.peran.indexOf(p) >= 0).map(x => x.label).join(', ');
         return ROLE_LABEL[p] || p;
-      }).join(' · ');
+      });
+      return jab.concat(lain).filter((x, i, a) => a.indexOf(x) === i).join(' · ') + (u.akun_contoh ? ' (akun contoh)' : '');
     },
     hariIni() { return (this.boot && this.boot.hari_ini) || new Date().toISOString().slice(0, 10); },
 
@@ -51,7 +55,7 @@
       this.perbaruiBadgeNav();
       return this.dosen;
     },
-    dosenAktif() { return (this.dosen || []).filter(d => d.aktif); },
+    dosenAktif() { return (this.dosen || []).filter(d => d.aktif && (!d.contoh || d.id_dosen === (this.user && this.user.id_dosen))); },
     invalidasi() { this.dosenAt = 0; },
 
     async muatBoot() {
@@ -123,9 +127,8 @@
       if (!i.grup) { nav += itemNav(i); return; }
       // Grup berisi satu item → tampil langsung tanpa submenu
       if (i.items.length === 1) { nav += itemNav(Object.assign({}, i.items[0], { label: i.items[0].label })); return; }
-      const buka = UI.bacaLokal('nav_' + i.grup, true);
-      nav += '<div class="nav-group' + (buka ? ' open' : '') + '" data-grup="' + i.grup + '">' +
-        '<button class="nav-group-head" type="button" aria-expanded="' + (buka ? 'true' : 'false') + '">' + ic(i.icon, 19) + '<span>' + esc(i.label) + '</span>' +
+      nav += '<div class="nav-group" data-grup="' + i.grup + '">' +
+        '<button class="nav-group-head" type="button" aria-expanded="false">' + ic(i.icon, 19) + '<span>' + esc(i.label) + '</span>' +
         '<span class="count hide" data-count-grup="' + i.grup + '"></span>' + ic('chevD', 16, ' class="chev"') + '</button>' +
         '<div class="nav-sub">' + i.items.map(x => itemNav(x, true)).join('') + '</div></div>';
     });
@@ -154,9 +157,11 @@
       '<span class="chip chip-blue hide-sm">' + ic('calendar', 14) + 'Semester ' + esc(UI.semesterAktif(today)) + '</span>' +
       '<div class="spacer"></div>' +
       '<span class="chip chip-green hide-sm" id="chip-pemicu" title="Pemicu harian otomatis">' + '<span class="dot"></span>Pemicu 07.00 WIB</span>' +
+      '<button class="btn btn-ghost btn-icon" data-tema title="Mode gelap/terang" aria-label="Ganti mode gelap/terang">' + ic(UI.temaAktif() === 'dark' ? 'sun' : 'moon', 18) + '</button>' +
       '<button class="btn btn-ghost btn-icon" data-refresh title="Muat ulang data" aria-label="Muat ulang data">' + ic('refresh', 18) + '</button>' +
-      '<a class="avatar sm" href="#/profil" title="Profil" style="text-decoration:none;background:var(--navy);color:#fff;border-color:var(--navy)">' + esc(UI.inisial(u.nama)) + '</a>' +
+      '<a class="avatar sm" href="#/profil" title="Profil" style="text-decoration:none;background:var(--navy-bg);color:#fff;border-color:var(--navy-bg)">' + esc(UI.inisial(u.nama)) + '</a>' +
       '</header>' +
+      (u.akun_contoh ? '<div class="banner-contoh">' + ic('info', 15) + '<span><b>Akun contoh.</b> Data di akun ini fiktif dan tidak dihitung di dashboard, laporan, maupun email.</span></div>' : '') +
       '<main class="content" id="view" tabindex="-1"></main>' +
       '<footer class="footer"><span>Universitas Trisakti — Fakultas Teknik Sipil dan Perencanaan · <a href="#" data-privasi>Pemberitahuan privasi</a></span><span>SIGAP v' + esc((App.boot && App.boot.app && App.boot.app.versi) || '1.3') + ' · Data per ' + UI.fmtTgl(today, true) + '</span></footer>' +
       '</div>' +
@@ -168,16 +173,13 @@
     const shell = document.getElementById('shell');
     shell.addEventListener('click', e => {
       const gh = e.target.closest('.nav-group-head');
-      if (gh) {
-        const g = gh.parentElement; const buka = !g.classList.contains('open');
-        g.classList.toggle('open', buka); gh.setAttribute('aria-expanded', buka ? 'true' : 'false');
-        UI.simpanLokal('nav_' + g.dataset.grup, buka);
-        return;
-      }
+      if (gh) { bukaGrup(gh.parentElement, !gh.parentElement.classList.contains('open')); return; }
       if (e.target.closest('[data-drawer]')) { e.preventDefault(); shell.classList.toggle('drawer-open'); }
       else if (e.target.closest('[data-drawer-close]') || e.target.closest('.sidebar .nav-item')) shell.classList.remove('drawer-open');
       if (e.target.closest('[data-logout]')) { e.preventDefault(); logout(); }
       if (e.target.closest('[data-privasi]')) { e.preventDefault(); tampilPrivasi(); }
+      const tb = e.target.closest('[data-tema]');
+      if (tb) { const t = UI.gantiTema(); tb.innerHTML = ic(t === 'dark' ? 'sun' : 'moon', 18); }
       if (e.target.closest('[data-refresh]')) {
         e.preventDefault();
         const b = e.target.closest('[data-refresh]');
@@ -211,14 +213,23 @@
     set('[data-count-grup="organisasi"]', tanpaHb, true);
   };
 
+  /** Akordeon: hanya satu submenu terbuka; membuka satu grup menutup grup lain. */
+  function bukaGrup(g, buka) {
+    document.querySelectorAll('.sidebar .nav-group').forEach(x => {
+      const on = x === g && buka;
+      x.classList.toggle('open', on);
+      x.querySelector('.nav-group-head').setAttribute('aria-expanded', on ? 'true' : 'false');
+    });
+  }
+
   function tandaiNav(r) {
     const u = App.user || {};
     const saya = r.name === 'dosen' && r.param && r.param === u.id_dosen;
     const kunci = saya ? 'dosen-saya' : r.name === 'organisasi' ? 'organisasi/' + (r.param || 'prodi') : r.name;
     document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('active', a.getAttribute('data-nav') === kunci));
     const aktif = document.querySelector('.sidebar .nav-item.active');
-    const g = aktif && aktif.closest('.nav-group');
-    if (g && !g.classList.contains('open')) { g.classList.add('open'); g.querySelector('.nav-group-head').setAttribute('aria-expanded', 'true'); }
+    bukaGrup(aktif && aktif.closest('.nav-group'), true);
+    document.querySelectorAll('.sidebar .nav-group').forEach(x => x.classList.toggle('has-active', !!x.querySelector('.nav-item.active')));
   }
 
   // ============================================================
@@ -358,7 +369,7 @@
     });
   }
 
-  /** FR-01: pemberitahuan privasi wajib disetujui pada login pertama (dan setiap versi baru). */
+  /** Pemberitahuan privasi wajib disetujui pada login pertama (dan setiap versi baru). */
   function renderPrivasi() {
     const teks = (App.boot && App.boot.teks_privasi) || [];
     document.getElementById('app').innerHTML =

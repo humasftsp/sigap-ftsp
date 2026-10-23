@@ -54,6 +54,8 @@
     copy: '<rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
     play: '<polygon points="6 3 20 12 6 21 6 3"/>',
     filter: '<path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+    moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
     building: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/>'
   };
   function ic(name, size, extra) {
@@ -298,7 +300,42 @@
     return '<div class="pager"><span class="muted small">Menampilkan ' + a + '–' + b + ' dari ' + total + '</span><div class="pg">' + btn + '</div></div>';
   }
 
+  // ---------- tema terang/gelap (disimpan per perangkat; bawaan mengikuti sistem) ----------
+  function temaAktif() { return document.documentElement.getAttribute('data-theme') || 'light'; }
+  function terapkanTema(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    const m = document.querySelector('meta[name=theme-color]'); if (m) m.setAttribute('content', t === 'dark' ? '#081A38' : '#113264');
+  }
+  function gantiTema() { const t = temaAktif() === 'dark' ? 'light' : 'dark'; terapkanTema(t); simpanLokal('tema', t); return t; }
+  (function () {
+    let t = bacaLokal('tema', null);
+    if (!t) { try { t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; } catch (e) { t = 'light'; } }
+    terapkanTema(t);
+  })();
+
+  // ---------- tombol mata pada setiap kolom password ----------
+  function pasangMata(root) {
+    (root || document).querySelectorAll('input[type=password]:not([data-mata])').forEach(i => {
+      i.setAttribute('data-mata', '1');
+      let wrap = i.parentElement;
+      if (!wrap.classList.contains('pw-wrap')) {
+        wrap = document.createElement('div'); wrap.className = 'pw-wrap';
+        i.parentNode.insertBefore(wrap, i); wrap.appendChild(i);
+      }
+      if (wrap.querySelector('[data-toggle-pw]')) return;
+      const b = document.createElement('button');
+      b.type = 'button'; b.setAttribute('data-toggle-pw', ''); b.setAttribute('aria-label', 'Tampilkan password'); b.title = 'Tampilkan/sembunyikan password';
+      b.innerHTML = ic('eye', 18);
+      b.onclick = () => { const show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.innerHTML = ic(show ? 'eyeOff' : 'eye', 18); b.setAttribute('aria-label', show ? 'Sembunyikan password' : 'Tampilkan password'); };
+      wrap.appendChild(b);
+    });
+  }
+  if (typeof MutationObserver !== 'undefined') {
+    new MutationObserver(() => pasangMata()).observe(document.documentElement, { childList: true, subtree: true });
+  }
+
   window.UI = {
+    temaAktif, gantiTema, pasangMata,
     ic, esc, fmtTgl, fmtWaktu, tambahBulan, hariKe, relatifBulan, tahapPengingat, semesterAktif, inisial, angka, ukuran,
     STATUS, badge, JAB, jab, jenjang, meterKel, avatar, identitas, person, motif, logo, lambang, toast, modal, konfirmasi, sibuk,
     base64KeBlob, unduhBlob, fileKeBase64, salin, debounce, simpanLokal, bacaLokal, empty, skeleton, pager

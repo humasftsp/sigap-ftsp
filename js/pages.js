@@ -26,6 +26,19 @@
   /** TMT acuan yang ditampilkan: TMT Jabamik; dosen TP tanpa jabamik memakai TMT Karyawan Tetap. */
   function tmtAcuan(d) { return d.tmt_jabamik || (d.status && d.status.jabatan === 'TP' ? d.tmt_karyawan_tetap : '') || d.tmt_jabamik; }
   Pages.tmtAcuan = tmtAcuan;
+  const STATUS_DOSEN = ['Aktif', 'Tugas Belajar', 'Izin Belajar', 'Cuti di Luar Tanggungan', 'Diperbantukan', 'Pensiun', 'Berhenti'];
+  Pages.STATUS_DOSEN = STATUS_DOSEN;
+  /** Badge status dosen (Aktif/Tugas Belajar/…). semua=false → hanya tampil bila bukan Aktif. */
+  function badgeStatusDosen(d, semua) {
+    const s = d.status_dosen || 'Aktif';
+    if (s === 'Aktif' && !semua) return '';
+    const cls = s === 'Aktif' ? 'b-ready' : /Belajar/.test(s) ? 'b-long' : /Pensiun|Berhenti/.test(s) ? 'b-gray' : 'b-short';
+    return '<span class="badge ' + cls + '" title="Status dosen' + (d.status_dosen_otomatis ? ' (otomatis dari periode tugas belajar)' : '') + '">' + ic(/Belajar/.test(s) ? 'cap' : 'user', 12) + esc(s) + '</span>';
+  }
+  Pages.badgeStatusDosen = badgeStatusDosen;
+  /** Jabatan struktural yang sedang dijabat, mis. "Wakil Dekan IV" ('' bila tidak ada). */
+  function jabatanKini(d) { return (d.struktural || []).map(j => j.label).join(', '); }
+  Pages.jabatanKini = jabatanKini;
   function tglEligibleHTML(st) {
     if (st.tgl_eligible) {
       const hari = UI.hariKe(App.hariIni(), st.tgl_eligible);
@@ -65,7 +78,7 @@
     let h = '<section class="hero">' + UI.motif(0.07) +
       '<div class="h-tags"><span class="h-tag">PEMANTAUAN JABATAN AKADEMIK</span><span class="h-tag">' + ic('building', 12) + esc(cakupan.toUpperCase()) + '</span></div>' +
       '<div class="h-row"><div><h1>Selamat datang, ' + esc(namaDepan) + '</h1>' +
-      '<p>' + nonGB + ' dosen non-Guru Besar dipantau otomatis berdasarkan TMT +24 bulan dan syarat tambahan' + (c.GB ? '; ' + c.GB + ' Guru Besar dikecualikan' : '') + '. Status dihitung ulang setiap hari dan setiap kali data berubah.</p></div>' +
+      '<p>Sistem Informasi Pengelolaan dan Pengembangan</p></div>' +
       '<div class="h-stat"><div class="l">PEMICU HARIAN TERAKHIR</div><div class="v">' + (boot.cfg.PEMICU_TERAKHIR ? UI.fmtWaktu(boot.cfg.PEMICU_TERAKHIR) + ' WIB' : 'Belum pernah berjalan') + '</div>' +
       (boot.cfg.PEMICU_RINGKASAN ? '<div class="l" style="margin-top:4px">' + esc(boot.cfg.PEMICU_RINGKASAN) + '</div>' : '') + '</div></div></section>';
 
@@ -80,7 +93,7 @@
       '<div class="k-top"><div class="k-label">' + k[2] + '</div><div class="k-ico">' + ic(STATUS[k[0]].icon, 18) + '</div></div>' +
       '<div class="k-val tabular">' + c[k[0]] + '<small>dosen</small></div><div class="k-title">' + k[3] + '</div><div class="k-desc">' + k[4] + '</div></a>').join('') + '</div>';
 
-    // Panel notifikasi organisasi (admin): homebase belum ditetapkan & pindah terjadwal (FR-06, v1.3)
+    // Panel notifikasi organisasi (admin): homebase belum ditetapkan & pindah terjadwal
     if (App.isAdmin()) {
       const tanpaHb = aktif.filter(d => !d.id_prodi_homebase);
       const jadwal = aktif.filter(d => d.homebase_terjadwal);
@@ -102,7 +115,7 @@
       const tanpa = dp.length - JAB_URUT.reduce((a, j) => a + n[j], 0);
       const pct = aktif.length ? Math.round(dp.length * 1000 / aktif.length) / 10 : 0;
       sebaran += '<div class="sebaran-row"><div class="sr-head"><div><b>' + esc(p) + '</b> <span class="badge b-blue">' + dp.length + ' dosen</span></div><span class="muted small">' + (prodiList.length > 1 ? pct + '% dosen fakultas' : '') + (tanpa ? ' · ' + tanpa + ' tanpa jabatan' : '') + '</span></div>' +
-        '<div class="stack">' + JAB_URUT.filter(j => n[j]).map(j => '<div class="j-' + j + '" style="flex:' + n[j] + '" title="' + UI.jab(j) + ': ' + n[j] + '">' + n[j] + ' ' + (j === 'ASA' ? 'AA' : j) + '</div>').join('') +
+        '<div class="stack">' + JAB_URUT.filter(j => n[j]).map(j => '<div class="j-' + j + '" style="flex:' + n[j] + '" title="' + UI.jab(j) + ': ' + n[j] + '">' + n[j] + ' ' + j + '</div>').join('') +
         (dp.length ? '' : '<div style="flex:1;background:var(--hover);color:var(--muted)">Belum ada data</div>') + '</div></div>';
     });
     const s3 = aktif.filter(d => d.s3_univ || d.s3_lulus).length;
@@ -130,9 +143,9 @@
 
     h += '<div class="grid g-main mb">' +
       '<div class="card"><div class="card-head"><div><h3>' + ic('grid', 18) + 'Distribusi Jabatan Akademik</h3><div class="sub">Komposisi jenjang dosen aktif per program studi</div></div><span class="badge b-blue">' + aktif.length + ' dosen aktif</span></div>' +
-      '<div class="card-body"><div class="legend">' + [['TP', '#CBD5E1'], ['ASA', '#A8C4FF'], ['L', '#0066CC'], ['LK', '#113264'], ['GB', '#D97706']].map(x => '<span><i style="background:' + x[1] + '"></i>' + (x[0] === 'ASA' ? 'AA' : x[0]) + ': ' + UI.jab(x[0]) + '</span>').join('') + '</div>' + sebaran +
+      '<div class="card-body"><div class="legend">' + [['TP', '#CBD5E1'], ['ASA', '#A8C4FF'], ['L', '#0066CC'], ['LK', '#113264'], ['GB', '#D97706']].map(x => '<span><i style="background:' + x[1] + '"></i>' + x[0] + ': ' + UI.jab(x[0]) + '</span>').join('') + '</div>' + sebaran +
       '<div class="ministats">' + ministat('Bergelar S3', s3, 'dari ' + aktif.length + ' dosen') + ministat('Tersertifikasi', serdos, 'Serdos tercatat') +
-      ministat('Kelengkapan berkas', rataKel + '%', 'rata-rata') + ministat('Tgl lahir kosong', tanpaLahir, 'perlu untuk pensiun') + '</div></div></div>' +
+      ministat('Kelengkapan berkas', rataKel + '%', 'rata-rata') + ministat('Tugas belajar', aktif.filter(d => /Belajar/.test(d.status_dosen || '')).length, 'sedang studi lanjut') + ministat('Tgl lahir kosong', tanpaLahir, 'perlu untuk pensiun') + '</div></div></div>' +
       '<div class="card"><div class="card-head"><div><h3>' + ic('hourglass', 18) + 'Peringatan Pensiun</h3><div class="sub">Jendela ' + boot.cfg.JENDELA_PENSIUN_BULAN + ' bulan ke depan</div></div>' + (pens.length ? '<span class="badge b-inc">' + pens.length + ' dosen</span>' : '') + '</div>' +
       '<div class="card-body">' + pensHTML + '<a class="btn btn-soft btn-sm" href="#/pensiun" style="width:100%;justify-content:center;margin-top:12px">Buka Peringatan Pensiun ' + ic('arrowR', 14) + '</a></div></div></div>';
 
@@ -161,7 +174,7 @@
       '<div class="h-row"><div><h1>Halo, ' + esc(String(d.nama).split(',')[0]) + '</h1><p>' + esc(m.label || st.status) + ' — ' + esc((st.alasan || []).join(' ')) + '</p></div>' +
       '<div class="h-stat"><div class="l">TANGGAL ELIGIBLE EFEKTIF</div><div class="v">' + (st.tgl_eligible ? fmtTgl(st.tgl_eligible, true) : st.status === 'GB' ? 'Tidak berlaku' : 'Belum dapat diestimasi') + '</div></div></div></section>';
     h += '<div class="grid g-main"><div class="card"><div class="card-head"><h3>' + ic('award', 18) + 'Syarat kenaikan jabatan</h3>' + badge(st.status) + '</div><div class="card-body">' +
-      '<div class="dproj" style="margin-top:0;margin-bottom:16px"><div><div class="l">Jabatan saat ini</div><div class="v">' + esc(st.jabatan_label) + '</div><div class="s">' + (st.acuan_tmt === 'TMT Karyawan Tetap' ? 'TMT Karyawan Tetap ' : 'TMT ') + fmtTgl(tmtAcuan(d)) + '</div></div>' +
+      '<div class="dproj" style="margin-top:0;margin-bottom:16px"><div><div class="l">Jabatan Akademik</div><div class="v">' + esc(st.jabatan_label) + '</div><div class="s">' + (st.acuan_tmt === 'TMT Karyawan Tetap' ? 'TMT Karyawan Tetap ' : 'TMT ') + fmtTgl(tmtAcuan(d)) + '</div></div>' +
       '<div><div class="l">Target berikutnya</div><div class="v">' + esc(st.target_label || '—') + '</div><div class="s">' + esc(d.status_pengusulan ? 'Pengusulan: ' + d.status_pengusulan : '') + '</div></div>' +
       '<div><div class="l">Eligible</div><div class="v">' + (st.tgl_eligible ? fmtTgl(st.tgl_eligible) : '—') + '</div><div class="s">' + (st.estimasi ? 'sebagian estimasi' : '') + '</div></div></div>' +
       checklist(st) + '<p class="muted small" style="margin:14px 0 0">Data kepegawaian (jabatan, TMT, pendidikan, homebase) diubah oleh admin kepegawaian FTSP. Profil singkat, bidang keahlian, dan nomor WhatsApp dapat Anda ubah di <a href="#/dosen/' + esc(d.id_dosen) + '?tab=profil">Profil Saya</a>.</p></div></div>' +
@@ -184,7 +197,7 @@
   // ============================================================
   // KATALOG DOSEN
   // ============================================================
-  const KAT = { q: '', prodi: '', status: '', jab: '', kel: '', sort: 'eligible', hal: 1, nonaktif: false };
+  const KAT = { q: '', prodi: '', status: '', jab: '', kel: '', sd: '', sort: 'eligible', hal: 1, nonaktif: false };
 
   Pages.dosen = async function (param, q) {
     if (param) return detailDosen(param);
@@ -198,11 +211,12 @@
 
   function filterKatalog() {
     const q = KAT.q.toLowerCase();
-    let l = (App.dosen || []).filter(d => (KAT.nonaktif ? true : d.aktif) && App.dalamLingkup(d));
+    let l = (App.dosen || []).filter(d => KAT.nonaktif ? (App.dalamLingkup(d) || d.contoh) : (d.aktif && App.dalamLingkup(d)));
     if (q) l = l.filter(d => (d.nama + ' ' + d.nidn + ' ' + d.nuptk + ' ' + d.email).toLowerCase().indexOf(q) >= 0);
     if (KAT.prodi === '__kosong') l = l.filter(d => !d.id_prodi_homebase);
     else if (KAT.prodi) l = l.filter(d => d.prodi === KAT.prodi);
     if (KAT.jab) l = l.filter(d => d.status.jabatan === KAT.jab);
+    if (KAT.sd) l = l.filter(d => (d.status_dosen || 'Aktif') === KAT.sd);
     if (KAT.kel === 'lengkap') l = l.filter(d => d.kelengkapan.persen >= 100);
     if (KAT.kel === 'kurang') l = l.filter(d => d.kelengkapan.persen < 100);
     const sebelumStatus = l;
@@ -237,10 +251,11 @@
     h += '<div class="toolbar"><div class="input-icon grow">' + ic('search', 17) + '<input class="input" id="k-q" placeholder="Cari nama, NIDN, NUPTK, email…" value="' + esc(KAT.q) + '"></div>' +
       (prodiList.length > 1 ? '<select class="input" id="k-prodi" aria-label="Homebase"><option value="">Semua homebase</option>' + prodiList.map(p => '<option ' + (KAT.prodi === p ? 'selected' : '') + '>' + esc(p) + '</option>').join('') + (App.lihatSemua() ? '<option value="__kosong" ' + (KAT.prodi === '__kosong' ? 'selected' : '') + '>Belum ditetapkan</option>' : '') + '</select>' : '') +
       '<select class="input" id="k-jab"><option value="">Semua jabatan</option>' + JAB_URUT.map(j => '<option value="' + j + '" ' + (KAT.jab === j ? 'selected' : '') + '>' + UI.jab(j) + '</option>').join('') + '</select>' +
+      '<select class="input" id="k-sd" aria-label="Status dosen"><option value="">Semua status dosen</option>' + STATUS_DOSEN.map(x => '<option ' + (KAT.sd === x ? 'selected' : '') + '>' + x + '</option>').join('') + '</select>' +
       '<select class="input" id="k-kel"><option value="">Semua kelengkapan</option><option value="lengkap" ' + (KAT.kel === 'lengkap' ? 'selected' : '') + '>Berkas lengkap</option><option value="kurang" ' + (KAT.kel === 'kurang' ? 'selected' : '') + '>Berkas belum lengkap</option></select>' +
       '<select class="input" id="k-sort" aria-label="Urutkan">' + [['eligible', 'Urut: Status & eligible'], ['nama', 'Urut: Nama'], ['jabatan', 'Urut: Jabatan'], ['kelengkapan', 'Urut: Kelengkapan']].map(o => '<option value="' + o[0] + '" ' + (KAT.sort === o[0] ? 'selected' : '') + '>' + o[1] + '</option>').join('') + '</select>' +
       '<div class="seg" id="k-view"><button class="' + (KAT.view !== 'tabel' ? 'on' : '') + '" data-v="grid">' + ic('grid', 15) + '</button><button class="' + (KAT.view === 'tabel' ? 'on' : '') + '" data-v="tabel">' + ic('list', 15) + '</button></div>' +
-      (admin ? '<label class="check small"><input type="checkbox" id="k-non" ' + (KAT.nonaktif ? 'checked' : '') + '>Tampilkan nonaktif</label>' : '') + '</div>';
+      (admin ? '<label class="check small"><input type="checkbox" id="k-non" ' + (KAT.nonaktif ? 'checked' : '') + '>Tampilkan nonaktif & akun contoh</label>' : '') + '</div>';
 
     if (!list.length) {
       h += '<div class="card">' + UI.empty('search', (App.dosen || []).length ? 'Tidak ada dosen yang cocok' : 'Belum ada data dosen', (App.dosen || []).length ? 'Ubah kata kunci atau filter.' : (admin ? 'Mulai dengan mengimpor file 2026-JABAMIK.xlsx atau menambah dosen satu per satu.' : 'Admin belum memasukkan data dosen.'),
@@ -264,6 +279,7 @@
     V().querySelectorAll('#k-view button').forEach(b => b.onclick = () => { KAT.view = b.dataset.v; UI.simpanLokal('view_dosen', KAT.view); rerender(); });
     V().querySelector('#k-jab').onchange = e => { KAT.jab = e.target.value; rerender(); };
     V().querySelector('#k-kel').onchange = e => { KAT.kel = e.target.value; rerender(); };
+    V().querySelector('#k-sd').onchange = e => { KAT.sd = e.target.value; rerender(); };
     V().querySelector('#k-sort').onchange = e => { KAT.sort = e.target.value; rerender(); };
     const non = V().querySelector('#k-non'); if (non) non.onchange = e => { KAT.nonaktif = e.target.checked; if (!KAT.nonaktif && KAT.status === 'NONAKTIF') KAT.status = ''; rerender(); };
     V().querySelectorAll('[data-hal]').forEach(b => b.onclick = () => { KAT.hal = +b.dataset.hal; renderKatalog(); window.scrollTo(0, 0); });
@@ -284,11 +300,11 @@
       mid = '<div class="dc-syarat">' + sy + '<div class="syr"><span class="k"><span style="color:var(--blue)">' + ic('calendar', 15) + '</span><span>Eligible efektif</span></span><span class="v" style="color:var(--navy)">' + (st.tgl_eligible ? fmtTgl(st.tgl_eligible) + (st.estimasi ? '*' : '') : 'Belum dapat diestimasi') + '</span></div></div>';
     }
     const proj = st.jabatan && st.target
-      ? '<div class="dc-proj"><div><div class="l">Saat ini</div><div class="v">' + esc(st.jabatan_label) + '</div></div><div class="arrow">' + ic('arrowR', 18) + '</div><div class="r"><div class="l">Target</div><div class="v">' + esc(st.target_label) + '</div></div></div>'
+      ? '<div class="dc-proj"><div><div class="l">Jabatan akademik</div><div class="v">' + esc(st.jabatan_label) + '</div></div><div class="arrow">' + ic('arrowR', 18) + '</div><div class="r"><div class="l">Target</div><div class="v">' + esc(st.target_label) + '</div></div></div>'
       : '<div class="dc-proj"><div><div class="l">Jabatan</div><div class="v">' + esc(st.jabatan_label || '—') + '</div></div><div></div><div></div></div>';
     return '<article class="card dcard ' + (d.aktif ? m.cls || '' : '') + '" data-href="#/dosen/' + esc(d.id_dosen) + '" style="cursor:pointer">' +
       '<div class="dc-top">' + UI.avatar(d) + '<div style="min-width:0;flex:1"><div class="dc-name">' + esc(d.nama) + '</div><div class="dc-meta">' + esc(UI.identitas(d)) + ' · ' + esc(d.prodi || 'Homebase belum ditetapkan') + '</div>' +
-      '<div class="dc-badge">' + (d.aktif ? badge(st.status) : badge('NONAKTIF')) + (d.status_pengusulan && d.status_pengusulan !== 'Belum' ? ' <span class="badge b-blue">' + esc(d.status_pengusulan) + '</span>' : '') + '</div></div></div>' +
+      '<div class="dc-badge">' + (d.aktif ? badge(st.status) : badge('NONAKTIF')) + ' ' + badgeStatusDosen(d) + (jabatanKini(d) ? ' <span class="badge b-navy">' + esc(jabatanKini(d)) + '</span>' : '') + (d.contoh ? ' <span class="badge b-gb">Akun contoh</span>' : '') + (d.status_pengusulan && d.status_pengusulan !== 'Belum' ? ' <span class="badge b-blue">' + esc(d.status_pengusulan) + '</span>' : '') + '</div></div></div>' +
       proj + mid + '<div class="dc-kel">' + UI.meterKel(d.kelengkapan) + '</div>' +
       '<div class="dc-foot"><a href="#/dosen/' + esc(d.id_dosen) + '" class="btn btn-ghost btn-sm">Lihat detail</a>' +
       (App.isAdmin() ? '<a href="#/dosen/' + esc(d.id_dosen) + '?tab=berkas" class="btn btn-soft btn-sm">' + ic('folder', 14) + 'Berkas</a>' : '<span class="small muted">' + d.kelengkapan.ada + '/' + d.kelengkapan.total + ' berkas</span>') + '</div></article>';
@@ -315,12 +331,14 @@
     let h = (App.pimpinan() ? '<a href="#/dosen" class="btn btn-ghost btn-sm" style="margin-bottom:12px;padding-left:6px">' + ic('chevL', 16) + 'Katalog dosen</a>' : '') +
       '<div class="card card-pad mb"><div class="dhead">' + UI.avatar(d, 'lg') + '<div class="dh-main"><h1>' + esc(d.nama) + '</h1>' +
       '<div class="meta">' + (d.nidn ? '<span>NIDN ' + esc(d.nidn) + '</span>' : '') + (d.nuptk ? '<span>· NUPTK ' + esc(d.nuptk) + '</span>' : '') + (d.prodi ? '<span class="tag">' + ic('building', 12) + ' ' + esc(d.prodi) + '</span>' : '<span class="badge b-short">Homebase belum ditetapkan</span>') + (d.struktural || []).map(j => '<span class="badge b-navy">' + esc(j.label) + '</span>').join('') +
-      (d.aktif ? badge(st.status) : badge('NONAKTIF')) + (d.status_pengusulan && d.status_pengusulan !== 'Belum' ? '<span class="badge b-blue">Pengusulan: ' + esc(d.status_pengusulan) + '</span>' : '') + '</div>' +
+      (d.aktif ? badge(st.status) : badge('NONAKTIF')) + badgeStatusDosen(d, true) + (d.contoh ? '<span class="badge b-gb">Akun contoh</span>' : '') + (d.status_pengusulan && d.status_pengusulan !== 'Belum' ? '<span class="badge b-blue">Pengusulan: ' + esc(d.status_pengusulan) + '</span>' : '') + '</div>' +
       (d.email ? '<div class="small muted" style="margin-top:6px">' + ic('mail', 13) + ' ' + esc(d.email) + '</div>' : '') + '</div>' +
       (admin ? '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-outline btn-sm" data-act="edit">' + ic('edit', 15) + 'Ubah data</button>' +
         '<button class="btn btn-primary btn-sm" data-act="pengusulan">' + ic('send', 15) + 'Status pengusulan</button>' +
         '<button class="btn btn-ghost btn-sm" data-act="aktif">' + (d.aktif ? 'Nonaktifkan' : 'Aktifkan') + '</button></div>' : (milik ? '<button class="btn btn-outline btn-sm" data-act="profilsaya">' + ic('edit', 15) + 'Ubah profil saya</button>' : '')) + '</div>' +
-      '<div class="dproj"><div><div class="l">Jabatan saat ini</div><div class="v">' + esc(st.jabatan_label || '—') + '</div><div class="s">' + (st.acuan_tmt === 'TMT Karyawan Tetap' ? 'TMT Karyawan Tetap ' : 'TMT ') + fmtTgl(tmtAcuan(d)) + (d.no_sk_jabatan ? ' · SK ' + esc(d.no_sk_jabatan) : '') + '</div></div>' +
+      '<div class="dproj dproj-4"><div><div class="l">Jabatan saat ini</div><div class="v">' + esc(jabatanKini(d) || 'Dosen') + '</div><div class="s">' +
+        ((d.struktural || []).length ? 'Jabatan struktural sejak ' + fmtTgl(d.struktural[0].tgl_mulai) + (d.struktural[0].tgl_selesai ? ' s.d. ' + fmtTgl(d.struktural[0].tgl_selesai) : '') : 'Tanpa jabatan struktural') + '</div></div>' +
+      '<div><div class="l">Jabatan Akademik</div><div class="v">' + esc(st.jabatan_label || '—') + '</div><div class="s">' + (st.acuan_tmt === 'TMT Karyawan Tetap' ? 'TMT Karyawan Tetap ' : 'TMT ') + fmtTgl(tmtAcuan(d)) + (d.no_sk_jabatan ? ' · SK ' + esc(d.no_sk_jabatan) : '') + '</div></div>' +
       '<div><div class="l">Target jabatan berikutnya</div><div class="v" style="color:var(--blue)">' + esc(st.target_label || (st.status === 'GB' ? 'Jenjang tertinggi' : '—')) + '</div><div class="s">' + esc(m.desc || '') + '</div></div>' +
       '<div><div class="l">Tanggal eligible efektif</div><div class="v">' + (st.tgl_eligible ? fmtTgl(st.tgl_eligible, true) : (st.status === 'PANJANG' ? 'Belum dapat diestimasi' : '—')) + '</div><div class="s">' +
       (st.tgl_eligible ? (UI.relatifBulan(st.bulan_ke_eligible) + (st.estimasi ? ' · sebagian estimasi' : '')) : '') + '</div></div></div>';
@@ -340,7 +358,7 @@
       if (t === 'profil') {
         const keahlian = String(d.bidang_keahlian || '').split(',').map(x => x.trim()).filter(Boolean);
         el.innerHTML = '<div class="grid g-main" style="align-items:start"><div class="card card-pad"><div class="lbl" style="margin-bottom:6px">DATA KEPEGAWAIAN</div><dl class="dl">' + [
-          ['Nama', d.nama], ['Homebase', d.prodi || 'Belum ditetapkan'], ['NIDN', d.nidn], ['NUPTK', d.nuptk || '—'], ['Status NUPTK', d.status_nuptk || (d.nuptk ? 'Ada' : '—')], ['Email', d.email],
+          ['Nama', d.nama], ['Status dosen', (d.status_dosen || 'Aktif') + (d.status_dosen_otomatis ? ' (otomatis dari periode tugas belajar)' : '')], ['Jabatan saat ini', jabatanKini(d) || 'Dosen'], ['Homebase', d.prodi || 'Belum ditetapkan'], ['NIDN', d.nidn], ['NUPTK', d.nuptk || '—'], ['Status NUPTK', d.status_nuptk || (d.nuptk ? 'Ada' : '—')], ['Email', d.email],
           ['Nomor WhatsApp', d.no_wa || '—'], ['Tanggal lahir', fmtTgl(d.tgl_lahir)], ['Usia', d.pensiun.usia_tahun !== null ? d.pensiun.usia_tahun + ' thn ' + d.pensiun.usia_bulan + ' bln' : '—'],
           ['TMT Karyawan Tetap', fmtTgl(d.tmt_karyawan_tetap)], ['TMT Jabamik', fmtTgl(d.tmt_jabamik)],
           ['Serdos', d.serdos || '—'], ['BKD terpenuhi berturut', d.bkd_semester !== '' ? d.bkd_semester + ' semester' : '—'],
@@ -437,7 +455,8 @@
 
   /** Form tambah/ubah dosen (admin). */
   Pages.formDosen = function (d) {
-    const v = d || {};
+    const v = Object.assign({}, d || {});
+    if (v.status_dosen_otomatis) v.status_dosen = 'Aktif'; // "Tugas Belajar" otomatis tidak disimpan sebagai nilai manual
     const f = (id, label, opt) => {
       opt = opt || {};
       const val = v[id] === undefined || v[id] === null ? '' : v[id];
@@ -462,7 +481,8 @@
           : f('id_prodi_homebase', 'Homebase (prodi)', { req: true, select: [['', '— pilih —']].concat((App.boot.prodi_master || []).filter(p => p.aktif).map(p => [p.id_prodi, p.label])) }) +
             f('tgl_homebase', 'Homebase berlaku sejak', { type: 'date', hint: 'Kosongkan untuk memakai TMT Karyawan Tetap atau hari ini.' })) +
         '<div class="form-section">Kepegawaian & jabatan akademik</div>' + f('tmt_karyawan_tetap', 'TMT Karyawan Tetap', { type: 'date', hint: 'Tanggal pengangkatan karyawan tetap. Dipakai sebagai acuan dosen TP yang belum memiliki jabamik.' }) +
-        f('jabatan', 'Jabatan saat ini', { select: jabOpt }) + f('tmt_jabamik', 'TMT Jabamik', { type: 'date', hint: 'Tanggal berlaku jabatan akademik terakhir (acuan aturan 24 bulan).' }) +
+        f('status_dosen', 'Status dosen', { select: STATUS_DOSEN.map(x => [x, x]), hint: 'Selama periode tugas belajar berjalan, status "Aktif" otomatis tampil sebagai Tugas Belajar.' }) +
+        f('jabatan', 'Jabatan akademik', { select: jabOpt }) + f('tmt_jabamik', 'TMT Jabamik', { type: 'date', hint: 'Tanggal berlaku jabatan akademik terakhir (acuan aturan 24 bulan).' }) +
         f('no_sk_jabatan', 'Nomor SK jabatan') + f('bkd_semester', 'BKD terpenuhi berturut (semester)', { type: 'number', attr: ' min="0" max="20"' }) + f('serdos', 'Serdos', { ph: 'mis. Ada, 2019' }) +
         '<div class="form-section">Pendidikan & tugas belajar</div>' + f('s1_univ', 'S1 — universitas') + f('s1_lulus', 'S1 — tahun/tanggal lulus', { ph: '2005 atau 2005-08-20' }) +
         f('s2_univ', 'S2 — universitas') + f('s2_lulus', 'S2 — tahun/tanggal lulus', { ph: '2010' }) + f('s3_univ', 'S3 — universitas') + f('s3_lulus', 'S3 — tanggal lulus', { ph: '2021-08-15', hint: 'Bila hanya tahun, dianggap lulus 31 Desember tahun itu.' }) +
@@ -483,7 +503,7 @@
     };
   };
 
-  /** FR-15: dosen mengubah profil profesionalnya sendiri. */
+  /** Dosen mengubah profil profesionalnya sendiri. */
   Pages.formProfilSaya = function (d) {
     const m = UI.modal({
       title: 'Ubah profil saya', sub: 'Data kepegawaian tetap diubah oleh admin.',
@@ -573,7 +593,7 @@
     l = l.slice().sort((a, b) => URUT_STATUS.indexOf(a.status.status) - URUT_STATUS.indexOf(b.status.status) || String(a.status.tgl_eligible || '9').localeCompare(String(b.status.tgl_eligible || '9')));
     const c = hitung(semua.filter(d => !JBM.prodi || d.prodi === JBM.prodi));
 
-    let h = head('Mesin status · FR-05', 'Kelayakan Jabatan Akademik', 'Status dihitung dari aturan di bawah. Perubahan aturan oleh admin langsung berlaku pada perhitungan berikutnya.',
+    let h = head('Mesin status', 'Kelayakan Jabatan Akademik', 'Status dihitung dari aturan di bawah. Perubahan aturan oleh admin langsung berlaku pada perhitungan berikutnya.',
       '<a class="btn btn-outline" href="#/cetak?jenis=status">' + ic('printer', 16) + 'Cetak rekap</a>' + (App.isAdmin() ? '<a class="btn btn-primary" href="#/pengaturan">' + ic('sliders', 16) + 'Ubah aturan</a>' : ''));
 
     h += '<div class="grid g-4 mb">' + ['SIAP', 'PENDEK', 'PANJANG', 'BELUM_LENGKAP'].map(s => '<button class="card kpi click ' + STATUS[s].cls + '" data-st="' + s + '" style="text-align:left;border-color:' + (JBM.status === s ? 'var(--blue)' : '') + '">' +
@@ -671,7 +691,7 @@
     const kosong = semua.filter(d => d.kelengkapan.ada === 0).length;
     const totalFile = semua.reduce((a, d) => a + d.kelengkapan.ada, 0);
 
-    let h = head('Berkas kepegawaian · FR-10', 'Kelengkapan Berkas Dosen', 'Seluruh jenis berkas bersifat opsional. ' + (admin ? 'Isi berkas tersimpan privat di Google Drive dan hanya dapat dibuka admin serta dosen bersangkutan.' : 'Anda hanya melihat status Ada/Belum; isi berkas hanya dapat dibuka admin dan dosen bersangkutan.'),
+    let h = head('Berkas kepegawaian', 'Kelengkapan Berkas Dosen', 'Seluruh jenis berkas bersifat opsional. ' + (admin ? 'Isi berkas tersimpan privat di Google Drive dan hanya dapat dibuka admin serta dosen bersangkutan.' : 'Anda hanya melihat status Ada/Belum; isi berkas hanya dapat dibuka admin dan dosen bersangkutan.'),
       '<a class="btn btn-outline" href="#/cetak?jenis=kelengkapan">' + ic('printer', 16) + 'Cetak rekap</a>');
     const kp = (cls, label, v, s, icon) => '<div class="card kpi ' + cls + '"><div class="k-top"><div class="k-label">' + label + '</div><div class="k-ico">' + ic(icon, 18) + '</div></div><div class="k-val tabular">' + v + '</div><div class="k-desc">' + s + '</div></div>';
     h += '<div class="grid g-4 mb">' + kp('ready', 'Lengkap 100%', lengkap + '<small>/ ' + semua.length + '</small>', 'Seluruh jenis berkas aktif sudah ada', 'checkCircle') +
@@ -746,9 +766,9 @@
     if (PNS.q) { const q = PNS.q.toLowerCase(); l = l.filter(d => d.nama.toLowerCase().indexOf(q) >= 0); }
     l = l.slice().sort((a, b) => (a.pensiun.bulan_ke_pensiun === null ? 9999 : a.pensiun.bulan_ke_pensiun) - (b.pensiun.bulan_ke_pensiun === null ? 9999 : b.pensiun.bulan_ke_pensiun));
 
-    let h = head('Pengingat pensiun · FR-12', 'Peringatan Masa Pensiun Dosen', 'Ditampilkan di dashboard saja (tanpa email). Usia pensiun per jabatan dan jendela tampil diatur admin.',
+    let h = head('Pengingat pensiun', 'Peringatan Masa Pensiun Dosen', 'Ditampilkan di dashboard saja (tanpa email). Usia pensiun per jabatan dan jendela tampil diatur admin.',
       '<a class="btn btn-outline" href="#/cetak?jenis=pensiun">' + ic('printer', 16) + 'Cetak daftar</a>' + (App.isAdmin() ? '<a class="btn btn-primary" href="#/pengaturan?tab=pensiun">' + ic('sliders', 16) + 'Atur usia pensiun</a>' : ''));
-    if (!diatur) h += '<div class="alert-box amber standalone">' + ic('alert', 16) + '<div><b>Usia pensiun belum diatur</b>Sesuai PRD, usia pensiun per jabatan diisi admin. Sebelum diisi, tanggal pensiun tidak dapat dihitung.' + (App.isAdmin() ? ' <a href="#/pengaturan?tab=pensiun">Atur sekarang →</a>' : '') + '</div></div>';
+    if (!diatur) h += '<div class="alert-box amber standalone">' + ic('alert', 16) + '<div><b>Usia pensiun belum diatur</b>Usia pensiun per jabatan diisi admin. Sebelum diisi, tanggal pensiun tidak dapat dihitung.' + (App.isAdmin() ? ' <a href="#/pengaturan?tab=pensiun">Atur sekarang →</a>' : '') + '</div></div>';
     const kp = (cls, label, v, s, icon) => '<div class="card kpi ' + cls + '"><div class="k-top"><div class="k-label">' + label + '</div><div class="k-ico">' + ic(icon, 18) + '</div></div><div class="k-val tabular">' + v + '<small>dosen</small></div><div class="k-desc">' + s + '</div></div>';
     h += '<div class="grid g-4 mb">' + kp('inc', 'Dalam jendela (≤' + jendela + ' bln)', dlm.length, 'Segera siapkan administrasi pensiun', 'alert') + kp('short', jendela + '–24 bulan', d24.length, 'Tahap perencanaan suksesi', 'clock') +
       kp('long', 'Melewati batas usia', lewat.length, 'Masih aktif di data — periksa status', 'alertCircle') + kp('', 'Tanggal lahir kosong', tanpa.length, 'Tidak dapat dihitung', 'calendar') + '</div>';
@@ -784,7 +804,7 @@
   Pages.profil = async function () {
     const u = App.user;
     V().innerHTML = head('Akun', 'Profil & Keamanan', '') +
-      '<div class="grid g-2" style="align-items:start"><div class="card card-pad"><div class="dhead"><div class="avatar lg" style="background:var(--navy);color:#fff;border-color:var(--navy)">' + esc(UI.inisial(u.nama)) + '</div>' +
+      '<div class="grid g-2" style="align-items:start"><div class="card card-pad"><div class="dhead"><div class="avatar lg" style="background:var(--navy-bg);color:#fff;border-color:var(--navy-bg)">' + esc(UI.inisial(u.nama)) + '</div>' +
       '<div class="dh-main"><h1 style="font-size:20px">' + esc(u.nama) + '</h1><div class="meta"><span>' + esc(u.email) + '</span></div><div class="meta">' + (u.peran || [u.role]).map(p => '<span class="badge b-navy">' + esc(App.roleLabel(p)) + '</span>').join('') + (u.admin_vault ? '<span class="badge b-blue">Izin vault</span>' : '') + (u.admin_dokumen_identitas ? '<span class="badge b-blue">Izin dokumen identitas</span>' : '') + '</div></div></div>' +
       '<dl class="dl" style="margin-top:16px"><div><dt>Cakupan data</dt><dd>' + esc(App.punya('ADMIN') ? 'Seluruh dosen (kelola)' : App.lihatSemua() ? 'Seluruh dosen (hanya baca)' : App.prodiPimpinan().length ? 'Dosen berhomebase ' + App.prodiPimpinan().join(', ') + ' (hanya baca) dan data diri sendiri' : 'Data diri sendiri') + '</dd></div>' +
       ((u.jabatan_struktural || []).length ? '<div><dt>Jabatan struktural aktif</dt><dd>' + esc(u.jabatan_struktural.map(j => j.nama_jabatan || App.roleLabel(j.jabatan)).join(', ')) + '</dd></div>' : '') +
