@@ -466,6 +466,179 @@
   }
 
   // ============================================================
+  // ATURAN KENAIKAN — per periode berlaku (halaman sendiri & tab Pengaturan)
+  // ============================================================
+  const AT = { data: null, draft: null, wadah: null, halaman: true };
+  const JABS = ['TP', 'ASA', 'L', 'LK', 'GB'];
+  const PREDIKAT = ['Sangat Baik', 'Baik', 'Butuh Perbaikan', 'Kurang', 'Sangat Kurang'];
+  const benarA = v => v === true || String(v).toUpperCase() === 'TRUE';
+
+  async function muatAturan() { AT.data = await API.call('listPeraturan'); }
+
+  Pages.aturan = async function () {
+    V().innerHTML = UI.skeleton(3);
+    await muatAturan();
+    if (!App.isCurrent()) return;
+    AT.draft = null; AT.halaman = true; AT.wadah = () => V();
+    renderAturan();
+  };
+  async function aturanDiTab(el) {
+    el.innerHTML = UI.skeleton(2);
+    await muatAturan();
+    AT.draft = null; AT.halaman = false; AT.wadah = () => document.getElementById('pg');
+    if (AT.wadah()) renderAturan();
+  }
+
+  function renderAturan() { if (AT.draft) return renderEditorAturan(); renderDaftarAturan(); }
+
+  function badgePeraturan(p) {
+    if (p.status === 'BERLAKU') return '<span class="badge b-ready">' + ic('checkCircle', 12) + 'Berlaku sekarang</span>';
+    if (p.status === 'AKAN') return '<span class="badge b-blue">' + ic('calendar', 12) + 'Mulai ' + UI.fmtTgl(p.berlaku_mulai) + '</span>';
+    return '<span class="badge b-gray">' + ic('history', 12) + 'Riwayat</span>';
+  }
+
+  function renderDaftarAturan() {
+    const W = AT.wadah(); const d = AT.data; const admin = d.boleh_ubah;
+    const pengantar = 'Aturan disimpan per periode berlaku. Saat peraturan berubah (misalnya tiap tahun), buat <b>aturan baru</b> dengan tanggal mulai berlaku: sistem otomatis memakainya pada tanggal itu, dan aturan lama tetap tersimpan sebagai riwayat.';
+    const tombol = admin ? '<button class="btn btn-primary" data-at-baru>' + ic('plus', 16) + 'Buat aturan baru</button>' : '';
+    let h = AT.halaman ? head('Administrasi', 'Aturan Kenaikan Jabatan', pengantar, tombol)
+      : '<div class="card card-pad mb" style="display:flex;gap:14px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap"><p class="muted" style="margin:0;max-width:760px">' + pengantar + '</p>' + tombol + '</div>';
+    h += d.peraturan.map(p => {
+      const aktif = p.aturan.filter(a => a.aktif);
+      return '<div class="card mb atr-card ' + p.status.toLowerCase() + '"><div class="card-head"><div><h3>' + ic('scale', 18) + esc(p.nama) + ' ' + badgePeraturan(p) + '</h3>' +
+        '<div class="sub">' + (p.berlaku_mulai ? 'Berlaku mulai ' + UI.fmtTgl(p.berlaku_mulai, true) : 'Berlaku sejak awal') + (p.dasar_hukum ? ' · Dasar: ' + esc(p.dasar_hukum) : '') + '</div></div>' +
+        (admin ? '<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-soft btn-sm" data-at-ubah="' + esc(p.id_peraturan) + '">' + ic('edit', 14) + 'Ubah</button>' +
+          '<button class="btn btn-outline btn-sm" data-at-salin="' + esc(p.id_peraturan) + '" title="Salin sebagai dasar aturan baru">' + ic('copy', 14) + 'Salin jadi aturan baru</button>' +
+          (p.status !== 'BERLAKU' ? '<button class="btn btn-ghost btn-sm" data-at-hapus="' + esc(p.id_peraturan) + '" title="Hapus">' + ic('trash', 14) + '</button>' : '') + '</div>' : '') + '</div>' +
+        '<div class="table-wrap"><table class="tbl"><thead><tr><th>Transisi</th><th class="num">Masa min.</th><th class="num">BKD min.</th><th>Pendidikan</th><th>Syarat khusus</th></tr></thead><tbody>' +
+        p.aturan.map(a => '<tr class="' + (a.aktif ? '' : 'muted') + '"><td class="nowrap"><b>' + esc(a.dari) + ' → ' + esc(a.ke) + '</b>' + (a.aktif ? '' : ' <span class="badge b-gray">nonaktif</span>') + '</td><td class="num">' + esc(a.masa_min_bulan) + ' bln</td><td class="num">' + esc(a.bkd_min_semester) + ' smt</td>' +
+          '<td>' + (a.pendidikan_min ? 'Wajib ' + esc(a.pendidikan_min) : '<span class="muted">—</span>') + '</td><td>' + (Pages.ringkasKhusus(a).map(esc).join('<br>') || '<span class="muted">—</span>') + (a.catatan ? '<div class="small muted">' + esc(a.catatan) + '</div>' : '') + '</td></tr>').join('') +
+        '</tbody></table></div>' + (p.catatan || p.diubah_pada ? '<div class="card-body" style="padding-top:10px"><div class="small muted">' + (p.catatan ? esc(p.catatan) + '<br>' : '') + (p.diubah_pada ? 'Terakhir diubah ' + UI.fmtWaktu(p.diubah_pada) + (p.diubah_oleh ? ' oleh ' + esc(p.diubah_oleh) : '') : '') + '</div></div>' : '') +
+        (aktif.length ? '' : '<div class="card-body"><span class="badge b-short">Tidak ada transisi aktif</span></div>') + '</div>';
+    }).join('');
+    W.innerHTML = h;
+    const cari = id => d.peraturan.find(p => p.id_peraturan === id);
+    const salinRows = p => p.aturan.map(a => Object.assign({}, a));
+    const berlaku = cari(d.id_berlaku) || d.peraturan[0];
+    const bb = W.querySelector('[data-at-baru]');
+    if (bb) bb.onclick = () => { AT.draft = { baru: true, nama: '', dasar_hukum: '', berlaku_mulai: '', catatan: '', aturan: berlaku ? salinRows(berlaku) : [], sumber: berlaku ? berlaku.nama : '' }; renderAturan(); };
+    W.querySelectorAll('[data-at-ubah]').forEach(b => b.onclick = () => { const p = cari(b.dataset.atUbah); AT.draft = Object.assign({}, p, { aturan: salinRows(p) }); renderAturan(); });
+    W.querySelectorAll('[data-at-salin]').forEach(b => b.onclick = () => { const p = cari(b.dataset.atSalin); AT.draft = { baru: true, nama: '', dasar_hukum: '', berlaku_mulai: '', catatan: '', aturan: salinRows(p), sumber: p.nama }; renderAturan(); });
+    W.querySelectorAll('[data-at-hapus]').forEach(b => b.onclick = async () => {
+      const p = cari(b.dataset.atHapus);
+      if (!await UI.konfirmasi('Hapus aturan "' + p.nama + '"?', p.status === 'AKAN' ? 'Aturan ini batal berlaku pada ' + UI.fmtTgl(p.berlaku_mulai, true) + '.' : 'Aturan ini dihapus dari riwayat.', { bahaya: true, ok: 'Hapus' })) return;
+      const r = await UI.sibuk(b, () => API.call('hapusPeraturan', { id_peraturan: p.id_peraturan }));
+      UI.toast(r.message); await selesaiUbahAturan();
+    });
+  }
+
+  function barisEditor(a, i, bawaan) {
+    const v = (k) => esc(a[k] === undefined || a[k] === null || a[k] === '' ? (bawaan[k] || '') : a[k]);
+    const sel = (cls, opsi, val) => '<select class="input ' + cls + '">' + opsi.map(o => { const o2 = Array.isArray(o) ? o : [o, o]; return '<option value="' + esc(o2[0]) + '" ' + (String(val) === String(o2[0]) ? 'selected' : '') + '>' + esc(o2[1]) + '</option>'; }).join('') + '</select>';
+    const akOn = String(a.syarat_ak_penelitian || '') !== '';
+    const kotak = (cls, on, judul, isi) => '<div class="atr-box ' + (on ? '' : 'off') + '"><label class="check atr-cek"><input type="checkbox" class="' + cls + '" ' + (on ? 'checked' : '') + '>' + judul + '</label>' + (isi ? '<div class="atr-isi">' + isi + '</div>' : '') + '</div>';
+    return '<div class="card mb atr-row" data-i="' + i + '"><div class="card-head" style="gap:10px;flex-wrap:wrap"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+      sel('r-dari atr-jab', JABS.slice(0, 4).map(j => [j, j + ' — ' + UI.jab(j)]), a.dari) + ic('arrowR', 16) + sel('r-ke atr-jab', JABS.slice(1).map(j => [j, j + ' — ' + UI.jab(j)]), a.ke) + '</div>' +
+      '<div style="display:flex;gap:10px;align-items:center"><label class="check"><input type="checkbox" class="r-aktif" ' + (a.aktif === false ? '' : 'checked') + '>Aktif</label><button class="btn btn-ghost btn-xs" data-r-hapus title="Hapus transisi">' + ic('trash', 14) + '</button></div></div>' +
+      '<div class="card-body"><div class="lbl" style="margin-bottom:8px">SYARAT UMUM</div><div class="form-grid atr-umum">' +
+      '<div class="field"><label>Masa jabatan minimal (bulan)</label><input class="input r-masa" type="number" min="0" max="240" value="' + esc(a.masa_min_bulan) + '"></div>' +
+      '<div class="field"><label>Predikat M BKD berturut-turut (semester)</label><input class="input r-bkd" type="number" min="0" max="20" value="' + esc(a.bkd_min_semester) + '"></div>' +
+      '<div class="field"><label>Pendidikan minimal</label>' + sel('r-pend', [['', 'Tidak disyaratkan'], ['S2', 'S2'], ['S3', 'S3']], a.pendidikan_min || '') + '</div>' +
+      '<div class="field"><label>Catatan (opsional)</label><input class="input r-cat" value="' + esc(a.catatan || '') + '" placeholder="mis. pasal acuan"></div></div>' +
+      '<div class="lbl" style="margin:14px 0 8px">SYARAT KHUSUS</div><div class="atr-grid">' +
+      kotak('r-skp', benarA(a.syarat_skp), 'Predikat kinerja (SKP)', '<div class="field"><label>Predikat minimal</label>' + sel('r-skpmin', PREDIKAT.slice(0, 3), v('skp_min')) + '</div><div class="field"><label>Berturut-turut (tahun terakhir)</label><input class="input r-skpthn" type="number" min="1" max="5" value="' + v('skp_tahun') + '"></div>') +
+      kotak('r-akon', akOn, 'Proporsi AK penelitian (SISTER)', '<div class="field"><label>Minimal % dari kekurangan AK</label><input class="input r-ak" type="number" min="0" max="100" value="' + esc(akOn ? a.syarat_ak_penelitian : '35') + '"></div>') +
+      kotak('r-pub', benarA(a.syarat_publikasi), 'Publikasi ilmiah', '<div class="field"><label>Jumlah artikel</label><input class="input r-pubn" type="number" min="1" max="10" value="' + v('pub_jumlah') + '"></div>' +
+        '<div class="field"><label>Jurnal nasional minimal</label>' + sel('r-sinta', [1, 2, 3, 4, 5, 6].map(n => [String(n), 'SINTA ' + n]), v('pub_sinta_min')) + '</div>' +
+        '<div class="field"><label>Jurnal internasional minimal</label>' + sel('r-scopus', ['Q1', 'Q2', 'Q3', 'Q4'].map(q => [q, 'Scopus ' + q]), v('pub_scopus_min')) + '</div>' +
+        '<div class="field"><label>SJR lebih dari</label><input class="input r-sjr" inputmode="decimal" placeholder="kosong = tidak disyaratkan" value="' + esc(String(a.pub_sjr_min === undefined ? bawaan.pub_sjr_min : a.pub_sjr_min).replace('.', ',')) + '"></div>' +
+        '<div class="field"><label>atau Impact Factor lebih dari</label><input class="input r-if" inputmode="decimal" placeholder="kosong = tidak disyaratkan" value="' + esc(String(a.pub_if_min === undefined ? bawaan.pub_if_min : a.pub_if_min).replace('.', ',')) + '"></div>') +
+      kotak('r-elk', benarA(a.syarat_elkite), 'Pengisian Elkite Tri Dharma', '<div class="small muted">Terpenuhi bila status Elkite dosen "Sudah".</div>') +
+      '</div></div></div>';
+  }
+
+  function bacaDraftAturan(W) {
+    const num = s => String(s || '').trim().replace(',', '.');
+    return [...W.querySelectorAll('.atr-row')].map(c => {
+      const q = s => c.querySelector(s);
+      return { dari: q('.r-dari').value, ke: q('.r-ke').value, aktif: q('.r-aktif').checked, masa_min_bulan: q('.r-masa').value, bkd_min_semester: q('.r-bkd').value, pendidikan_min: q('.r-pend').value, catatan: q('.r-cat').value,
+        syarat_skp: q('.r-skp').checked, skp_min: q('.r-skpmin').value, skp_tahun: q('.r-skpthn').value,
+        syarat_ak_penelitian: q('.r-akon').checked ? q('.r-ak').value : '',
+        syarat_publikasi: q('.r-pub').checked, pub_jumlah: q('.r-pubn').value, pub_sinta_min: q('.r-sinta').value, pub_scopus_min: q('.r-scopus').value, pub_sjr_min: num(q('.r-sjr').value), pub_if_min: num(q('.r-if').value),
+        syarat_elkite: q('.r-elk').checked };
+    });
+  }
+
+  function renderEditorAturan() {
+    const W = AT.wadah(); const dr = AT.draft; const bawaan = AT.data.bawaan || {};
+    const admin = AT.data.boleh_ubah;
+    const judul = dr.baru ? 'Aturan baru' : 'Ubah aturan';
+    let h = AT.halaman ? '<a href="#/aturan" class="btn btn-ghost btn-sm" style="margin-bottom:12px;padding-left:6px" data-at-batal>' + ic('chevL', 16) + 'Daftar aturan</a>' + head('Aturan Kenaikan', judul, dr.baru ? 'Disalin dari "' + esc(dr.sumber || '—') + '". Ubah bagian yang berbeda, isi tanggal mulai berlaku, lalu simpan.' : '') : '<div style="margin-bottom:12px"><button class="btn btn-ghost btn-sm" style="padding-left:6px" data-at-batal>' + ic('chevL', 16) + 'Kembali ke daftar aturan</button></div>';
+    if (dr.status === 'BERLAKU') h += '<div class="alert-box amber standalone">' + ic('alert', 16) + '<div><b>Ini aturan yang sedang berlaku</b>Perubahan langsung mengubah status semua dosen. Bila peraturan baru baru berlaku mulai tanggal tertentu, lebih baik gunakan <b>Salin jadi aturan baru</b> agar aturan sekarang tetap tersimpan sebagai riwayat.</div></div>';
+    h += '<div class="card mb"><div class="card-head"><div><h3>' + ic('scale', 18) + 'Identitas aturan</h3></div></div><div class="card-body"><div class="form-grid">' +
+      '<div class="field"><label>Nama aturan *</label><input class="input" id="at-nama" value="' + esc(dr.nama || '') + '" placeholder="mis. Aturan Jabamik ' + (new Date(App.hariIni()).getFullYear() + 1) + '"></div>' +
+      '<div class="field"><label>Berlaku mulai ' + (dr.baru || dr.berlaku_mulai ? '*' : '') + '</label><input class="input" type="date" id="at-mulai" value="' + esc(dr.berlaku_mulai || '') + '"><span class="hint">Mulai tanggal ini status dosen dihitung dengan aturan ini. Boleh tanggal yang akan datang.</span></div>' +
+      '<div class="field"><label>Dasar hukum / acuan</label><input class="input" id="at-dasar" value="' + esc(dr.dasar_hukum || '') + '" placeholder="Nomor dan tahun peraturan atau SK"></div>' +
+      '<div class="field"><label>Catatan</label><input class="input" id="at-cat" value="' + esc(dr.catatan || '') + '" placeholder="mis. ringkasan perubahan dari aturan sebelumnya"></div></div></div></div>';
+    h += '<div id="at-rows">' + dr.aturan.map((a, i) => barisEditor(a, i, bawaan)).join('') + '</div>';
+    h += '<button class="btn btn-soft mb" data-at-tambah>' + ic('plus', 16) + 'Tambah transisi</button>';
+    h += '<div class="atr-foot"><span class="small muted">Disarankan menjalankan simulasi sebelum menyimpan.</span><span style="flex:1"></span><button class="btn btn-outline" data-at-batal>Batal</button><button class="btn btn-outline" data-at-sim>' + ic('play', 15) + 'Simulasi dampak</button>' + (admin ? '<button class="btn btn-primary" data-at-simpan>' + ic('check', 15) + 'Simpan aturan</button>' : '') + '</div>';
+    W.innerHTML = h;
+
+    const segarkanKotak = () => W.querySelectorAll('.atr-box').forEach(b => { const c = b.querySelector('.atr-cek input'); b.classList.toggle('off', !c.checked); b.querySelectorAll('.atr-isi input, .atr-isi select').forEach(x => x.disabled = !c.checked); });
+    W.querySelectorAll('.atr-cek input').forEach(c => c.onchange = segarkanKotak);
+    segarkanKotak();
+    const ambilDraft = () => { dr.nama = W.querySelector('#at-nama').value; dr.berlaku_mulai = W.querySelector('#at-mulai').value; dr.dasar_hukum = W.querySelector('#at-dasar').value; dr.catatan = W.querySelector('#at-cat').value; dr.aturan = bacaDraftAturan(W); return dr; };
+    W.querySelectorAll('[data-r-hapus]').forEach(b => b.onclick = () => { ambilDraft(); dr.aturan.splice(+b.closest('.atr-row').dataset.i, 1); renderEditorAturan(); });
+    W.querySelector('[data-at-tambah]').onclick = () => {
+      ambilDraft();
+      const pakai = dr.aturan.map(a => a.dari);
+      const dari = JABS.slice(0, 4).find(j => pakai.indexOf(j) < 0) || 'TP';
+      dr.aturan.push(Object.assign({ dari, ke: JABS[JABS.indexOf(dari) + 1], masa_min_bulan: 24, bkd_min_semester: 4, pendidikan_min: '', aktif: true, syarat_skp: false, syarat_ak_penelitian: '', syarat_publikasi: false, syarat_elkite: false }, bawaan));
+      renderEditorAturan();
+    };
+    W.querySelectorAll('[data-at-batal]').forEach(b => b.onclick = e => { e.preventDefault(); AT.draft = null; renderAturan(); });
+    W.querySelector('[data-at-sim]').onclick = async e => {
+      ambilDraft();
+      const r = await UI.sibuk(e.currentTarget, () => API.call('simulasiPeraturan', { rows: dr.aturan }));
+      tampilSimulasi(r);
+    };
+    const bs = W.querySelector('[data-at-simpan]');
+    if (bs) bs.onclick = async e => {
+      ambilDraft();
+      const r = await UI.sibuk(e.currentTarget, () => API.call('savePeraturan', { peraturan: { id_peraturan: dr.baru ? '' : dr.id_peraturan, nama: dr.nama, dasar_hukum: dr.dasar_hukum, berlaku_mulai: dr.berlaku_mulai, catatan: dr.catatan }, rows: dr.aturan }));
+      UI.toast(r.message);
+      AT.draft = null;
+      await selesaiUbahAturan();
+    };
+  }
+
+  async function selesaiUbahAturan() {
+    await muatAturan();
+    await App.muatBoot(); App.invalidasi();
+    if (AT.wadah()) renderAturan();
+  }
+
+  function tampilSimulasi(r) {
+    const L = { SIAP: 'Siap diusulkan', PENDEK: 'Rencana pendek', PANJANG: 'Rencana panjang', BELUM_LENGKAP: 'Data belum lengkap', GB: 'Guru Besar' };
+    const beda = n => n > 0 ? '<b style="color:var(--short-tx)">+' + n + '</b>' : n < 0 ? '<b style="color:var(--ready-tx)">' + n + '</b>' : '<span class="muted">0</span>';
+    const statusBerubah = r.berubah.filter(b => b.lama !== b.baru);
+    const tglSaja = r.berubah.length - statusBerubah.length;
+    const m = UI.modal({
+      title: 'Simulasi dampak aturan', size: 'lg',
+      body: '<p class="muted small" style="margin-top:0">Status semua dosen aktif dihitung ulang seolah aturan ini berlaku hari ini (' + UI.fmtTgl(r.hari_ini, true) + '). Tidak ada data yang diubah.</p>' +
+        '<div class="table-wrap"><table class="tbl"><thead><tr><th>Status</th><th class="num">Saat ini</th><th class="num">Dengan aturan ini</th><th class="num">Selisih</th></tr></thead><tbody>' +
+        Object.keys(L).map(k => '<tr><td>' + UI.badge(k) + '</td><td class="num">' + r.ringkas[k].lama + '</td><td class="num"><b>' + r.ringkas[k].baru + '</b></td><td class="num">' + beda(r.ringkas[k].baru - r.ringkas[k].lama) + '</td></tr>').join('') + '</tbody></table></div>' +
+        '<h4 style="margin:18px 0 8px">' + statusBerubah.length + ' dosen berubah status' + (tglSaja ? ' · ' + tglSaja + ' dosen berubah tanggal eligible' : '') + '</h4>' +
+        (r.berubah.length ? '<div class="table-wrap" style="max-height:340px;overflow:auto"><table class="tbl"><thead><tr><th>Dosen</th><th>Status</th><th>Eligible</th><th>Alasan dengan aturan ini</th></tr></thead><tbody>' +
+          r.berubah.slice(0, 300).map(b => '<tr><td style="min-width:190px"><b>' + esc(b.nama) + '</b><div class="small muted">' + esc(b.prodi || '') + ' · ' + esc(b.jabatan) + '</div></td><td class="nowrap">' + (b.lama === b.baru ? UI.badge(b.baru) : UI.badge(b.lama) + ' ' + ic('arrowR', 12) + ' ' + UI.badge(b.baru)) + '</td>' +
+            '<td class="nowrap small">' + (b.eligible_lama ? UI.fmtTgl(b.eligible_lama) : '—') + (b.eligible_lama !== b.eligible_baru ? ' → ' + (b.eligible_baru ? UI.fmtTgl(b.eligible_baru) : '—') : '') + '</td><td class="small">' + esc(b.alasan) + '</td></tr>').join('') + '</tbody></table></div>' : '<div class="muted">Tidak ada dosen yang berubah status atau tanggal eligible.</div>'),
+      foot: '<button class="btn btn-primary" data-close>Tutup</button>'
+    });
+    return m;
+  }
+
+  // ============================================================
   // PENGATURAN
   // ============================================================
   const PG = { tab: 'aturan' };
@@ -486,30 +659,13 @@
   function renderPengaturan() {
     const d = PG.data;
     const tabs = [['aturan', 'Aturan kenaikan'], ['pensiun', 'Usia pensiun'], ['jenis', 'Jenis berkas'], ['penerima', 'Penerima email'], ['umum', 'Umum'], ['pemicu', 'Pemicu & email']];
-    let h = head('Pengaturan', 'Pengaturan Aturan & Sistem', 'Perubahan aturan langsung berlaku pada perhitungan status berikutnya untuk semua pengguna.');
+    let h = head('Pengaturan', 'Pengaturan Aturan & Sistem', 'Aturan kenaikan jabatan, usia pensiun, jenis berkas, penerima email, dan pemicu otomatis.');
     h += '<div class="tabs">' + tabs.map(t => '<button class="' + (PG.tab === t[0] ? 'on' : '') + '" data-t="' + t[0] + '">' + t[1] + '</button>').join('') + '</div><div id="pg"></div>';
     V().innerHTML = h;
     V().querySelectorAll('[data-t]').forEach(b => b.onclick = () => { PG.tab = b.dataset.t; renderPengaturan(); });
     const el = V().querySelector('#pg');
-    const jabSel = (val, cls) => '<select class="input ' + cls + '">' + ['TP', 'ASA', 'L', 'LK', 'GB'].map(j => '<option value="' + j + '" title="' + UI.jab(j) + '" ' + (val === j ? 'selected' : '') + '>' + j + '</option>').join('') + '</select>';
 
-    if (PG.tab === 'aturan') {
-      const benar = v => v === true || String(v).toUpperCase() === 'TRUE';
-      const baris = a => '<tr><td>' + jabSel(a.dari, 'a-dari') + '</td><td>' + jabSel(a.ke, 'a-ke') + '</td><td><input class="input a-masa" type="number" min="0" max="240" value="' + esc(a.masa_min_bulan) + '"></td>' +
-        '<td><input class="input a-bkd" type="number" min="0" max="20" value="' + esc(a.bkd_min_semester) + '"></td><td><select class="input a-pend">' + [['', 'Tidak ada'], ['S2', 'S2'], ['S3', 'S3']].map(o => '<option value="' + o[0] + '" ' + (String(a.pendidikan_min || '') === o[0] ? 'selected' : '') + '>' + o[1] + '</option>').join('') + '</select></td>' +
-        '<td class="ctr"><input type="checkbox" class="a-skp" title="SKP minimal Baik 2 tahun terakhir" ' + (benar(a.syarat_skp) ? 'checked' : '') + '></td>' +
-        '<td><input class="input a-ak" type="number" min="0" max="100" placeholder="—" title="Minimal % AK penelitian dari kekurangan AK (kosong = tidak disyaratkan)" value="' + esc(a.syarat_ak_penelitian || '') + '" style="width:76px"></td>' +
-        '<td class="ctr"><input type="checkbox" class="a-pub" title="1 publikasi memenuhi (SINTA 4+ / Scopus Q4+)" ' + (benar(a.syarat_publikasi) ? 'checked' : '') + '></td>' +
-        '<td class="ctr"><input type="checkbox" class="a-elk" title="Pengisian Elkite Tri Dharma" ' + (benar(a.syarat_elkite) ? 'checked' : '') + '></td>' +
-        '<td class="ctr"><input type="checkbox" class="a-aktif" ' + (benar(a.aktif) ? 'checked' : '') + '></td><td><button class="btn btn-ghost btn-xs" data-rm>' + ic('trash', 14) + '</button></td></tr>';
-      el.innerHTML = '<div class="card"><div class="card-head"><div><h3>Aturan transisi jabatan (tab ATURAN)</h3><div class="sub">Bawaan: masa 24 bulan; BKD TP→ASA 2 semester, lainnya 4; S3 wajib untuk L→LK dan LK→GB. Syarat khusus (SKP, AK penelitian, publikasi, Elkite) bawaan aktif untuk ASA→L.</div></div><button class="btn btn-soft btn-sm" data-addrow>' + ic('plus', 14) + 'Tambah baris</button></div>' +
-        '<div class="card-body"><div class="table-wrap"><table class="tbl etbl"><thead><tr><th>Dari</th><th>Ke</th><th>Masa min (bln)</th><th>BKD min (smt)</th><th>Pendidikan min</th><th class="ctr">SKP</th><th>AK penelitian %</th><th class="ctr">Publikasi</th><th class="ctr">Elkite</th><th class="ctr">Aktif</th><th></th></tr></thead><tbody id="rows">' +
-        d.aturan.map(baris).join('') + '</tbody></table></div><div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-primary" data-save>Simpan aturan</button></div></div></div>';
-      el.querySelector('[data-addrow]').onclick = () => { el.querySelector('#rows').insertAdjacentHTML('beforeend', baris({ dari: 'TP', ke: 'ASA', masa_min_bulan: 24, bkd_min_semester: 4, pendidikan_min: '', aktif: true })); bindRm(); };
-      const bindRm = () => el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => b.closest('tr').remove());
-      bindRm();
-      el.querySelector('[data-save]').onclick = e => simpanBagian(e.target, 'aturan', { rows: [...el.querySelectorAll('#rows tr')].map(tr => ({ dari: tr.querySelector('.a-dari').value, ke: tr.querySelector('.a-ke').value, masa_min_bulan: tr.querySelector('.a-masa').value, bkd_min_semester: tr.querySelector('.a-bkd').value, pendidikan_min: tr.querySelector('.a-pend').value, syarat_skp: tr.querySelector('.a-skp').checked, syarat_ak_penelitian: tr.querySelector('.a-ak').value, syarat_publikasi: tr.querySelector('.a-pub').checked, syarat_elkite: tr.querySelector('.a-elk').checked, aktif: tr.querySelector('.a-aktif').checked })) });
-    }
+    if (PG.tab === 'aturan') aturanDiTab(el).catch(e => { el.innerHTML = UI.empty('alertCircle', 'Gagal memuat aturan', esc(e.message)); });
     if (PG.tab === 'pensiun') {
       el.innerHTML = '<div class="card"><div class="card-head"><div><h3>Usia pensiun per jabatan (tab PENSIUN_ATURAN)</h3><div class="sub">Nilai ini diisi admin. Kosongkan bila belum ditetapkan — dosen dengan jabatan tersebut tidak dihitung tanggal pensiunnya.</div></div></div>' +
         '<div class="card-body"><div class="table-wrap"><table class="tbl etbl"><thead><tr><th>Jabatan</th><th>Usia pensiun (tahun)</th></tr></thead><tbody>' +

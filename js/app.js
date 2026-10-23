@@ -10,7 +10,7 @@
     WD1: 'Wakil Dekan I', WD2: 'Wakil Dekan II', WD3: 'Wakil Dekan III', WD4: 'Wakil Dekan IV' };
   const PIMPINAN = ['ADMIN', 'PIMPINAN', 'DEKAN', 'WAKIL_DEKAN', 'KAPRODI', 'SEKPRODI'];
   /** Versi backend minimum yang dibutuhkan frontend ini. Bila backend lebih lama, admin diberi peringatan. */
-  const VERSI_FRONTEND = '1.3.2';
+  const VERSI_FRONTEND = '1.3.3'; // dipakai internal untuk mendeteksi backend yang belum diperbarui; tidak ditampilkan
   function versiLebihLama(a, b) {
     const x = String(a || '0').split('.').map(Number), y = String(b).split('.').map(Number);
     for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0); }
@@ -111,10 +111,11 @@
       ] } : null,
       { grup: 'laporan', label: 'Laporan & Template', icon: 'printer', items: [
         { id: 'cetak', label: 'Cetak & Rekap', icon: 'printer' }
-      ].concat(pimp ? [{ id: 'templat', label: 'Template & Contoh', icon: 'file' }] : []) },
+      ].concat(pimp ? [{ id: 'usia', label: 'Rekap Usia Dosen', icon: 'bars' }, { id: 'templat', label: 'Template & Contoh', icon: 'file' }] : []) },
       admin ? { grup: 'admin', label: 'Administrasi', icon: 'sliders', items: [
         { id: 'impor', label: 'Tambah / Impor', icon: 'upload' },
         { id: 'akun', label: 'Pengguna & Akun', icon: 'key' },
+        { id: 'aturan', label: 'Aturan Kenaikan', icon: 'scale' },
         { id: 'pengaturan', label: 'Pengaturan', icon: 'sliders' },
         { id: 'log', label: 'Log & Audit', icon: 'history' }
       ] } : null
@@ -163,16 +164,15 @@
       '<a href="#/dashboard" class="brandmark tb-brand" style="color:var(--navy);text-decoration:none">' + UI.lambang('navy') + '<div><div class="t1">SIGAP FTSP</div><div class="t2" style="color:var(--blue)">UNIVERSITAS TRISAKTI</div></div></a>' +
       (!dosenSaja ? '<div class="input-icon hide-sm" style="width:min(380px,32vw)">' + ic('search', 17) + '<input class="input" id="global-q" placeholder="Cari nama dosen, NIDN, atau NUPTK…" style="height:38px;background:var(--surface-2)"></div>' : '') +
       '<div class="spacer"></div>' +
-      '<span class="chip chip-green hide-sm" id="chip-pemicu" title="Pemicu harian otomatis">' + '<span class="dot"></span>Pemicu 07.00 WIB</span>' +
       '<button class="btn btn-ghost btn-icon" data-tema title="Mode gelap/terang" aria-label="Ganti mode gelap/terang">' + ic(UI.temaAktif() === 'dark' ? 'sun' : 'moon', 18) + '</button>' +
       '<button class="btn btn-ghost btn-icon" data-refresh title="Muat ulang data" aria-label="Muat ulang data">' + ic('refresh', 18) + '</button>' +
       '<a class="avatar sm" href="#/profil" title="Profil" style="text-decoration:none;background:var(--navy-bg);color:#fff;border-color:var(--navy-bg)">' + esc(UI.inisial(u.nama)) + '</a>' +
       '</header>' +
       (App.isAdmin() && App.boot && versiLebihLama(App.boot.app && App.boot.app.versi, VERSI_FRONTEND) ? '<div class="banner-contoh" style="background:var(--inc-bg);color:var(--inc-tx);border-color:var(--inc-bd)">' + ic('alert', 15) +
-        '<span><b>Backend belum diperbarui.</b> Tampilan ini versi ' + VERSI_FRONTEND + ', tetapi backend (Apps Script) yang aktif masih versi ' + esc((App.boot.app && App.boot.app.versi) || '?') + '. Beberapa fitur akan gagal (mis. "Jabatan struktural tidak valid"). Tempel file .gs terbaru lalu Deploy → Manage deployments → Edit → <b>New version</b>.</span></div>' : '') +
+        '<span><b>Backend belum diperbarui.</b> Tampilan sudah memakai pembaruan terbaru, tetapi kode backend (Apps Script) yang aktif masih yang lama, sehingga beberapa fitur akan gagal. Tempel file .gs terbaru lalu Deploy → Manage deployments → Edit → <b>New version</b>.</span></div>' : '') +
       (u.akun_contoh ? '<div class="banner-contoh">' + ic('info', 15) + '<span><b>Akun contoh.</b> Data di akun ini fiktif dan tidak dihitung di dashboard, laporan, maupun email.</span></div>' : '') +
       '<main class="content" id="view" tabindex="-1"></main>' +
-      '<footer class="footer"><span>Universitas Trisakti — Fakultas Teknik Sipil dan Perencanaan · <a href="#" data-privasi>Pemberitahuan privasi</a></span><span>SIGAP v' + esc((App.boot && App.boot.app && App.boot.app.versi) || '1.3') + ' · Data per ' + UI.fmtTgl(today, true) + '</span></footer>' +
+      '<footer class="footer"><span>Universitas Trisakti — Fakultas Teknik Sipil dan Perencanaan · <a href="#" data-privasi>Pemberitahuan privasi</a></span><span>Data per ' + UI.fmtTgl(today, true) + '</span></footer>' +
       '</div>' +
       '<nav class="bottom-nav" aria-label="Navigasi bawah">' +
       bn.map(b => '<a href="' + (b[0] === '__menu' ? '#' : '#/' + b[0]) + '" ' + (b[0] === '__menu' ? 'data-drawer' : 'data-nav="' + (b[3] || b[0]) + '"') + '>' + ic(b[1], 22) + '<span>' + b[2] + '</span></a>').join('') +
@@ -192,22 +192,12 @@
       if (e.target.closest('[data-refresh]')) {
         e.preventDefault();
         const b = e.target.closest('[data-refresh]');
-        UI.sibuk(b, async () => { await App.muatBoot(); await App.muatDosen(true); perbaruiChipPemicu(); App.route(); UI.toast('Data diperbarui'); }).catch(() => { });
+        UI.sibuk(b, async () => { await App.muatBoot(); await App.muatDosen(true); App.route(); UI.toast('Data diperbarui'); }).catch(() => { });
       }
     });
     const gq = document.getElementById('global-q');
     // Kata kunci langsung dibawa ke Katalog Dosen lalu kotak pencarian dikosongkan kembali
     if (gq) gq.addEventListener('keydown', e => { if (e.key === 'Enter') { const v = gq.value.trim(); gq.value = ''; gq.blur(); App.go('#/dosen?q=' + encodeURIComponent(v)); } });
-    perbaruiChipPemicu();
-  }
-
-  function perbaruiChipPemicu() {
-    const chip = document.getElementById('chip-pemicu');
-    if (!chip || !App.boot) return;
-    const t = App.boot.cfg.PEMICU_TERAKHIR;
-    chip.innerHTML = '<span class="dot"></span>' + (t ? 'Pemicu terakhir ' + UI.fmtWaktu(t) : 'Pemicu 07.00 WIB · belum berjalan');
-    chip.className = 'chip hide-sm ' + (t ? 'chip-green' : 'chip-amber');
-    if (App.boot.cfg.PEMICU_RINGKASAN) chip.title = App.boot.cfg.PEMICU_RINGKASAN;
   }
 
   App.perbaruiBadgeNav = function () {
@@ -256,7 +246,7 @@
 
   const AKSES = {
     dashboard: null, dosen: null, berkas: null, cetak: null, profil: null, templat: null,
-    jabamik: PIMPINAN, pensiun: PIMPINAN, impor: ['ADMIN'], akun: ['ADMIN'], pengaturan: ['ADMIN'], log: ['ADMIN'], organisasi: ['ADMIN']
+    jabamik: PIMPINAN, pensiun: PIMPINAN, usia: PIMPINAN, aturan: PIMPINAN, impor: ['ADMIN'], akun: ['ADMIN'], pengaturan: ['ADMIN'], log: ['ADMIN'], organisasi: ['ADMIN']
   };
 
   App.route = async function () {

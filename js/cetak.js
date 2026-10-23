@@ -67,10 +67,12 @@
   /** Bangun dokumen sesuai jenis & filter. Mengembalikan {judul, html}. */
   async function bangun(jenis, f) {
     let list = App.dosenAktif().filter(App.dalamLingkup);
-    if (f.prodi) list = list.filter(d => d.prodi === f.prodi);
-    if (f.status) list = list.filter(d => d.status.status === f.status);
+    if (f.prodi) list = list.filter(d => (d.prodi || 'Belum ditetapkan') === f.prodi);
+    if (f.status && jenis !== 'usia') list = list.filter(d => d.status.status === f.status);
     if (f.jab) list = list.filter(d => d.status.jabatan === f.jab);
-    const fil = [f.prodi ? 'Prodi ' + f.prodi : (App.lihatSemua() ? 'Semua prodi' : 'Prodi ' + App.prodiPimpinan().join(', ')), f.status ? 'Status: ' + kolStatus(f.status) : '', f.jab ? 'Jabatan: ' + UI.jab(f.jab) : ''].filter(Boolean).join(' · ');
+    if (f.jur) list = list.filter(d => (d.kelompok_bidang || '') === f.jur);
+    if (f.sd) list = list.filter(d => (d.status_dosen || 'Aktif') === f.sd);
+    const fil = [f.jur ? 'Jurusan ' + f.jur : '', f.prodi ? 'Prodi ' + f.prodi : (f.jur ? '' : App.lihatSemua() ? 'Semua prodi' : 'Prodi ' + App.prodiPimpinan().join(', ')), f.status && jenis !== 'usia' ? 'Status: ' + kolStatus(f.status) : '', f.jab ? 'Jabatan: ' + UI.jab(f.jab) : '', f.sd ? 'Status dosen: ' + f.sd : ''].filter(Boolean).join(' · ');
     const sub = fil + ' · Data per ' + fmtTgl(App.hariIni(), true);
 
     if (jenis === 'prodi') {
@@ -109,6 +111,25 @@
         ds.map((d, i) => { const p = d.pensiun; return '<tr><td class="c">' + (i + 1) + '</td><td class="b">' + esc(d.nama) + '</td><td>' + esc(d.prodi) + '</td><td>' + esc(d.status.jabatan_label) + '</td><td>' + fmtTgl(d.tgl_lahir) + '</td><td>' + p.usia_tahun + ' thn ' + p.usia_bulan + ' bln</td><td>' + p.usia_pensiun + ' thn</td><td class="b">' + fmtTgl(p.tgl_pensiun) + '</td><td>' + (p.bulan_ke_pensiun < 0 ? 'Lewat ' + (-p.bulan_ke_pensiun) + ' bln' : p.bulan_ke_pensiun + ' bln') + '</td></tr>'; }).join('') +
         (ds.length ? '' : '<tr><td colspan="9" class="c mut">Tidak ada dosen yang mencapai batas usia dalam 24 bulan (atau usia pensiun belum diatur).</td></tr>') + '</tbody></table>';
       return { judul: 'Daftar Dosen Mendekati Batas Usia Pensiun', html: dokumen('Daftar Dosen Mendekati Batas Usia Pensiun (≤24 bulan)', sub, isi, true) };
+    }
+    if (jenis === 'usia') {
+      const S = Pages.statUsia(list, f.mode || '10');
+      const a1 = Pages.angka1, ud = Pages.usiaDosen;
+      const pct = n => S.ada.length ? String(Math.round(n * 1000 / S.ada.length) / 10).replace('.', ',') + '%' : '—';
+      const jabAda = Pages.JAB_URUT.filter(j => list.some(d => d.status.jabatan === j));
+      let isi = '<table class="ringkas" style="border-collapse:collapse;margin:4px 0 6px"><tr>' + [['Dosen dengan data usia', S.ada.length + ' / ' + S.total], ['Rata-rata usia', a1(S.rata) + ' thn'], ['Median', a1(S.median) + ' thn'], ['Termuda – tertua', S.ada.length ? S.min + ' – ' + S.maks + ' thn' : '—']]
+        .map(x => '<td><span class="mut">' + x[0] + '</span><br><b style="font-size:12pt">' + x[1] + '</b></td>').join('') + '</tr></table>';
+      isi += '<h2>Sebaran kelompok usia</h2><table class="data"><thead><tr><th>Kelompok usia</th>' + jabAda.map(j => '<th class="c">' + UI.jab(j) + '</th>').join('') + '<th class="c">Jumlah</th><th class="c">%</th></tr></thead><tbody>' +
+        S.kelompok.map(k => '<tr><td class="b">' + esc(k.label) + ' tahun</td>' + jabAda.map(j => '<td class="c">' + k.dosen.filter(d => d.status.jabatan === j).length + '</td>').join('') + '<td class="c b">' + k.dosen.length + '</td><td class="c">' + pct(k.dosen.length) + '</td></tr>').join('') +
+        '<tr><td class="b">Jumlah</td>' + jabAda.map(j => '<td class="c b">' + S.ada.filter(d => d.status.jabatan === j).length + '</td>').join('') + '<td class="c b">' + S.ada.length + '</td><td class="c">100%</td></tr>' +
+        '<tr><td class="b">Rata-rata usia</td>' + jabAda.map(j => '<td class="c">' + a1(S.rataFn(S.ada.filter(d => d.status.jabatan === j))) + '</td>').join('') + '<td class="c b">' + a1(S.rata) + '</td><td></td></tr></tbody></table>' +
+        (S.tanpa.length ? '<div class="mut" style="font-size:8.5pt;margin-top:4px">' + S.tanpa.length + ' dosen belum memiliki tanggal lahir dan tidak dihitung: ' + esc(S.tanpa.map(d => d.nama).join('; ')) + '.</div>' : '');
+      if (S.prodi.length > 1) isi += '<h2>Per program studi (homebase)</h2><table class="data"><thead><tr><th>Kelompok usia</th>' + S.prodi.map(p => '<th class="c">' + esc(p) + '</th>').join('') + '<th class="c">Jumlah</th></tr></thead><tbody>' +
+        S.kelompok.map(k => '<tr><td class="b">' + esc(k.label) + ' tahun</td>' + S.prodi.map(p => '<td class="c">' + k.dosen.filter(d => (d.prodi || 'Belum ditetapkan') === p).length + '</td>').join('') + '<td class="c b">' + k.dosen.length + '</td></tr>').join('') +
+        '<tr><td class="b">Rata-rata usia</td>' + S.prodi.map(p => '<td class="c">' + a1(S.rataFn(S.ada.filter(d => (d.prodi || 'Belum ditetapkan') === p))) + '</td>').join('') + '<td class="c b">' + a1(S.rata) + '</td></tr></tbody></table>';
+      if (S.pensiunDiatur) isi += '<h2>Proyeksi mencapai batas usia pensiun</h2><table class="data"><thead><tr><th>Tahun</th><th class="c">Jumlah</th><th>Nama</th></tr></thead><tbody>' +
+        S.proyeksi.map(p => '<tr><td class="b">' + p.tahun + (p.tahun === S.proyeksi[0].tahun ? ' (sisa tahun ini)' : '') + '</td><td class="c">' + p.dosen.length + '</td><td>' + esc(p.dosen.map(d => d.nama).join('; ') || '—') + '</td></tr>').join('') + '</tbody></table>';
+      return { judul: 'Rekap Usia Dosen', html: dokumen('Rekap Usia Dosen', sub, isi, true) };
     }
     if (jenis === 'profil') {
       if (!f.id_dosen) throw new Error('Pilih dosen terlebih dahulu.');
@@ -178,7 +199,8 @@
       ['status', 'Rekap Status Kelayakan', 'Dikelompokkan per status beserta alasannya', 'award'],
       ['profil', 'Profil Dosen', 'Satu dosen: identitas, syarat, riwayat jabatan', 'user'],
       ['kelengkapan', 'Rekap Kelengkapan Berkas', 'Matriks Ada/Belum per jenis berkas', 'folder'],
-      ['pensiun', 'Daftar Mendekati Pensiun', 'Dosen yang mencapai batas usia ≤24 bulan', 'hourglass']
+      ['pensiun', 'Daftar Mendekati Pensiun', 'Dosen yang mencapai batas usia ≤24 bulan', 'hourglass'],
+      ['usia', 'Rekap Usia Dosen', 'Sebaran kelompok usia per jabatan & prodi, proyeksi pensiun', 'bars']
     ];
     const prodiList = App.lihatSemua() ? App.boot.prodi : App.prodiPimpinan();
     const dosenOpt = App.dosenAktif().filter(d => App.dalamLingkup(d) || d.id_dosen === App.user.id_dosen).slice().sort((a, b) => a.nama.localeCompare(b.nama));
@@ -191,7 +213,7 @@
       if (CTK.jenis === 'profil') h += '<select class="input grow" id="c-d"><option value="">— pilih dosen —</option>' + dosenOpt.map(d => '<option value="' + esc(d.id_dosen) + '" ' + (CTK.id_dosen === d.id_dosen ? 'selected' : '') + '>' + esc(d.nama) + ' · ' + esc(d.prodi) + '</option>').join('') + '</select>';
       else {
         if (prodiList.length > 1) h += '<select class="input" id="c-p"><option value="">Semua prodi</option>' + prodiList.map(p => '<option ' + (CTK.prodi === p ? 'selected' : '') + '>' + esc(p) + '</option>').join('') + '</select>';
-        if (CTK.jenis !== 'status') h += '<select class="input" id="c-s"><option value="">Semua status</option>' + ['SIAP', 'PENDEK', 'PANJANG', 'BELUM_LENGKAP', 'GB'].map(s => '<option value="' + s + '" ' + (CTK.status === s ? 'selected' : '') + '>' + STATUS[s].label + '</option>').join('') + '</select>';
+        if (CTK.jenis !== 'status' && CTK.jenis !== 'usia') h += '<select class="input" id="c-s"><option value="">Semua status</option>' + ['SIAP', 'PENDEK', 'PANJANG', 'BELUM_LENGKAP', 'GB'].map(s => '<option value="' + s + '" ' + (CTK.status === s ? 'selected' : '') + '>' + STATUS[s].label + '</option>').join('') + '</select>';
         h += '<select class="input" id="c-jb"><option value="">Semua jabatan</option>' + ['TP', 'ASA', 'L', 'LK', 'GB'].map(j => '<option value="' + j + '" ' + (CTK.jab === j ? 'selected' : '') + '>' + UI.jab(j) + '</option>').join('') + '</select>';
       }
       h += '<div style="flex:1"></div><button class="btn btn-outline" data-word>' + ic('file', 16) + 'Unduh Word</button><button class="btn btn-primary" data-pdf>' + ic('printer', 16) + 'Cetak / PDF</button></div>';

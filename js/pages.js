@@ -39,6 +39,22 @@
   /** Jabatan struktural yang sedang dijabat, mis. "Wakil Dekan IV" ('' bila tidak ada). */
   function jabatanKini(d) { return (d.struktural || []).map(j => j.label).join(', '); }
   Pages.jabatanKini = jabatanKini;
+
+  const fa = v => String(v).replace('.', ',');
+  const benar = v => v === true || String(v).toUpperCase() === 'TRUE';
+  /** Ringkasan syarat khusus satu baris aturan, mis. ["SKP min. Baik 2 tahun terakhir", ...]. */
+  function ringkasKhusus(a) {
+    const k = [];
+    if (benar(a.syarat_skp)) k.push('SKP min. ' + (a.skp_min || 'Baik') + ' ' + (a.skp_tahun || 2) + ' tahun terakhir');
+    if (String(a.syarat_ak_penelitian || '').trim()) k.push('AK penelitian ≥ ' + a.syarat_ak_penelitian + '%');
+    if (benar(a.syarat_publikasi)) {
+      const m = [String(a.pub_sjr_min || '') !== '' ? 'SJR > ' + fa(a.pub_sjr_min) : '', String(a.pub_if_min || '') !== '' ? 'IF > ' + fa(a.pub_if_min) : ''].filter(Boolean).join(' atau ');
+      k.push((a.pub_jumlah || 1) + ' publikasi min. SINTA ' + (a.pub_sinta_min || 4) + ' atau Scopus ' + (a.pub_scopus_min || 'Q4') + (m ? ' (' + m + ')' : ''));
+    }
+    if (benar(a.syarat_elkite)) k.push('Elkite Tri Dharma');
+    return k;
+  }
+  Pages.ringkasKhusus = ringkasKhusus;
   function tglEligibleHTML(st) {
     if (st.tgl_eligible) {
       const hari = UI.hariKe(App.hariIni(), st.tgl_eligible);
@@ -443,6 +459,9 @@
     const st = d.status;
     const khusus = (st.syarat || []).filter(x => x.khusus);
     const tahun = +App.hariIni().slice(0, 4);
+    const kr = sk.kriteria || { skp_tahun: 2, skp_min: 'Baik', pub: { jumlah: 1, sinta: 4, scopus: 4, sjr: 0.1, ifc: 0.05 } };
+    const thnSkp = []; for (let i = kr.skp_tahun; i >= 1; i--) thnSkp.push(tahun - i);
+    const metrikPub = [kr.pub.sjr !== null ? 'SJR &gt; ' + fa(kr.pub.sjr) : '', kr.pub.ifc !== null ? 'IF &gt; ' + fa(kr.pub.ifc) : ''].filter(Boolean).join(' atau ');
     const piliran = (App.boot.pilihan || {});
     let h = '';
     if (!khusus.length) h += '<div class="alert-box blue standalone">' + ic('info', 16) + '<div><b>Tidak ada syarat khusus untuk jenjang berikutnya</b>Syarat khusus diatur per transisi jabatan di Pengaturan → Aturan kenaikan (bawaan: Asisten Ahli → Lektor). Data di bawah tetap dapat diisi untuk dokumentasi.</div></div>';
@@ -450,7 +469,7 @@
       khusus.map(s => '<div class="ck ' + (s.terpenuhi ? 'ok' : 'no') + '"><div class="ic">' + ic(s.terpenuhi ? 'check' : 'clock', 16) + '</div><div><div class="t">' + esc(s.nama) + '</div><div class="s">' + esc(s.ket) + '</div></div><div class="d">' + (s.terpenuhi ? 'Terpenuhi' : 'Belum') + '</div></div>').join('') + '</div></div>';
 
     // SKP
-    h += '<div class="grid g-2 g-stack mb" style="align-items:start"><div class="card"><div class="card-head"><div><h3>' + ic('award', 18) + 'Predikat Kinerja (SKP)</h3><div class="sub">Minimal "Baik" berturut-turut ' + (tahun - 2) + ' & ' + (tahun - 1) + '</div></div>' +
+    h += '<div class="grid g-2 g-stack mb" style="align-items:start"><div class="card"><div class="card-head"><div><h3>' + ic('award', 18) + 'Predikat Kinerja (SKP)</h3><div class="sub">Minimal "' + esc(kr.skp_min) + '" berturut-turut ' + (thnSkp.length > 2 ? thnSkp[0] + '–' + thnSkp[thnSkp.length - 1] : thnSkp.join(' & ')) + '</div></div>' +
       (boleh ? '<button class="btn btn-soft btn-sm" data-skp-add>' + ic('plus', 14) + 'Tambah SKP</button>' : '') + '</div><div class="card-body">' +
       (sk.skp.length ? '<div class="table-wrap"><table class="tbl"><thead><tr><th>Tahun</th><th>Predikat</th><th>Bukti</th><th></th></tr></thead><tbody>' + sk.skp.map(x =>
         '<tr><td><b>' + esc(x.tahun) + '</b></td><td><span class="badge ' + (/^(Sangat Baik|Baik)$/.test(x.predikat) ? 'b-ready' : 'b-inc') + '">' + esc(x.predikat) + '</span>' + (x.catatan ? '<div class="small muted">' + esc(x.catatan) + '</div>' : '') + '</td>' +
@@ -465,7 +484,7 @@
       '<div><dt>Data SISTER per</dt><dd>' + fmtTgl(sk.ak_tgl_data) + '</dd></div><div><dt>Elkite Tri Dharma</dt><dd>' + (sk.elkite_status === 'Sudah' ? '<span class="badge b-ready">' + ic('check', 12) + 'Sudah diisi</span> <span class="small muted">' + fmtTgl(sk.elkite_tgl) + '</span>' : '<span class="badge b-short">Belum diisi</span>') + '</dd></div></dl></div></div></div>';
 
     // Publikasi
-    h += '<div class="card"><div class="card-head"><div><h3>' + ic('file', 18) + 'Publikasi Ilmiah</h3><div class="sub">Minimal 1 artikel yang memenuhi syarat</div></div>' +
+    h += '<div class="card"><div class="card-head"><div><h3>' + ic('file', 18) + 'Publikasi Ilmiah</h3><div class="sub">Minimal ' + kr.pub.jumlah + ' artikel yang memenuhi syarat</div></div>' +
       (boleh ? '<button class="btn btn-soft btn-sm" data-pub-add>' + ic('plus', 14) + 'Tambah publikasi</button>' : '') + '</div><div class="card-body">' +
       (sk.publikasi.length ? sk.publikasi.map(x => '<div class="litem"><div class="row"><div class="t">' + esc(x.judul) + '</div>' + (x.memenuhi ? '<span class="badge b-ready">' + ic('check', 12) + 'Memenuhi</span>' : '<span class="badge b-gray" title="' + esc(x.alasan) + '">Tidak memenuhi</span>') + '</div>' +
         '<div class="s">' + esc([x.jenis_publikasi, x.nama_jurnal, x.peringkat_jurnal, x.sjr ? 'SJR ' + x.sjr.replace('.', ',') : '', x.impact_factor ? 'IF ' + x.impact_factor.replace('.', ',') : '', x.status_jurnal !== 'Aktif' ? x.status_jurnal : '', x.tgl_terbit ? fmtTgl(x.tgl_terbit) : ''].filter(Boolean).join(' · ')) + '</div>' +
@@ -474,7 +493,7 @@
         (x.tautan ? '<a class="btn btn-ghost btn-xs" href="' + esc(x.tautan) + '" target="_blank" rel="noopener">' + ic('arrowR', 13) + 'Tautan</a>' : '') +
         (boleh ? '<span style="flex:1"></span><button class="btn btn-ghost btn-xs" data-pub-edit="' + esc(x.id_kegiatan) + '">' + ic('edit', 13) + 'Ubah</button><button class="btn btn-ghost btn-xs" data-pub-del="' + esc(x.id_kegiatan) + '">' + ic('trash', 13) + '</button>' : '') + '</div></div>').join('')
         : '<div class="muted">Belum ada publikasi tercatat.</div>') +
-      '<p class="muted small" style="margin:12px 0 0">' + ic('info', 13) + ' Memenuhi bila jurnal nasional terakreditasi min. SINTA 4, atau jurnal internasional terindeks Scopus Q1–Q4 dengan SJR &gt; 0,1 atau IF &gt; 0,05 dan status jurnal tidak cancelled/discontinued.</p>' +
+      '<p class="muted small" style="margin:12px 0 0">' + ic('info', 13) + ' Memenuhi bila jurnal nasional terakreditasi min. SINTA ' + kr.pub.sinta + ', atau jurnal internasional terindeks Scopus Q1–Q' + kr.pub.scopus + (metrikPub ? ' dengan ' + metrikPub : '') + ' dan status jurnal tidak cancelled/discontinued.</p>' +
       '<p class="muted small" style="margin:6px 0 0">' + ic('file', 13) + ' Contoh SKP dan contoh bukti korespondensi author tersedia di menu <a href="#/templat">Template & Contoh</a>.</p></div></div>' +
       '<input type="file" accept="application/pdf,image/jpeg,image/png" class="hide" id="bukti-file">';
     el.innerHTML = h;
@@ -546,7 +565,7 @@
           '<div class="field"><label>Peran penulis</label><input class="input" id="pb-p" value="' + esc(x.peran || '') + '" placeholder="mis. Penulis pertama"></div>' +
           '<div class="field"><label>DOI</label><input class="input" id="pb-d" value="' + esc(x.doi || '') + '" placeholder="10.xxxx/xxxxx"></div>' +
           '<div class="field"><label>Tautan artikel</label><input class="input" id="pb-u" value="' + esc(x.tautan || '') + '" placeholder="https://"></div>' +
-           '<div class="field full pb-int"><span class="hint" style="margin-top:-6px">Jurnal internasional memenuhi bila Q1–Q4, SJR &gt; 0,1 atau IF &gt; 0,05, dan status Aktif.</span></div>' +
+           '<div class="field full pb-int"><span class="hint" style="margin-top:-6px">Jurnal internasional memenuhi bila Q1–Q' + kr.pub.scopus + (metrikPub ? ', ' + metrikPub : '') + ', dan status Aktif.</span></div>' +
           '<div class="field full"><label class="check"><input type="checkbox" id="pb-c" ' + (x.penulis_korespondensi ? 'checked' : '') + '>Sebagai penulis korespondensi (corresponding author)</label></div></div>' +
           '<span class="hint">Setelah disimpan, unggah berkas artikel dan bukti korespondensi pada daftar publikasi.</span>',
         foot: '<button class="btn btn-outline" data-close>Batal</button><button class="btn btn-primary" data-ok>Simpan</button>'
@@ -824,19 +843,20 @@
     l = l.slice().sort((a, b) => URUT_STATUS.indexOf(a.status.status) - URUT_STATUS.indexOf(b.status.status) || String(a.status.tgl_eligible || '9').localeCompare(String(b.status.tgl_eligible || '9')));
     const c = hitung(semua.filter(d => !JBM.prodi || d.prodi === JBM.prodi));
 
-    let h = head('Mesin status', 'Kelayakan Jabatan Akademik', 'Status dihitung dari aturan di bawah. Perubahan aturan oleh admin langsung berlaku pada perhitungan berikutnya.',
-      '<a class="btn btn-outline" href="#/cetak?jenis=status">' + ic('printer', 16) + 'Cetak rekap</a>' + (App.isAdmin() ? '<a class="btn btn-primary" href="#/pengaturan">' + ic('sliders', 16) + 'Ubah aturan</a>' : ''));
+    let h = head('Mesin status', 'Kelayakan Jabatan Akademik', 'Status dihitung dari aturan kenaikan yang berlaku hari ini. Bila peraturan berubah, admin menyiapkan aturan baru dengan tanggal mulai berlaku.',
+      '<a class="btn btn-outline" href="#/cetak?jenis=status">' + ic('printer', 16) + 'Cetak rekap</a>' + (App.isAdmin() ? '<a class="btn btn-primary" href="#/aturan">' + ic('scale', 16) + 'Ubah aturan</a>' : '<a class="btn btn-outline" href="#/aturan">' + ic('scale', 16) + 'Lihat aturan</a>'));
 
     h += '<div class="grid g-4 mb">' + ['SIAP', 'PENDEK', 'PANJANG', 'BELUM_LENGKAP'].map(s => '<button class="card kpi click ' + STATUS[s].cls + '" data-st="' + s + '" style="text-align:left;border-color:' + (JBM.status === s ? 'var(--blue)' : '') + '">' +
       '<div class="k-top"><div class="k-label">' + STATUS[s].label + '</div><div class="k-ico">' + ic(STATUS[s].icon, 18) + '</div></div><div class="k-val tabular">' + c[s] + '<small>dosen</small></div><div class="k-desc">' + STATUS[s].desc + '</div></button>').join('') + '</div>';
 
-    h += '<div class="card card-pad mb"><div class="lbl" style="margin-bottom:10px">ATURAN KENAIKAN AKTIF (tab ATURAN)</div><div class="rules">' + aturan.map(a =>
+    const info = App.boot.aturan_info || {};
+    h += '<div class="card card-pad mb"><div class="lbl" style="margin-bottom:4px">ATURAN KENAIKAN YANG BERLAKU</div>' +
+      (info.berlaku ? '<div class="small muted" style="margin-bottom:10px"><b style="color:var(--ink)">' + esc(info.berlaku.nama) + '</b> · ' + (info.berlaku.berlaku_mulai ? 'berlaku sejak ' + fmtTgl(info.berlaku.berlaku_mulai, true) : 'berlaku sejak awal') + (info.berlaku.dasar_hukum ? ' · ' + esc(info.berlaku.dasar_hukum) : '') + '</div>' : '') +
+      (info.berikut ? '<div class="alert-box blue standalone" style="margin-bottom:12px">' + ic('calendar', 16) + '<div><b>Aturan baru dijadwalkan</b>"' + esc(info.berikut.nama) + '" berlaku mulai ' + fmtTgl(info.berikut.berlaku_mulai, true) + '. Status dosen otomatis dihitung ulang dengan aturan itu pada tanggalnya.</div></div>' : '') +
+      '<div class="rules">' + aturan.map(a =>
       '<div class="rule ' + (a.aktif ? '' : 'off') + '"><div class="rt">' + esc(a.dari) + ' ' + ic('arrowR', 14) + ' ' + esc(a.ke) + (a.aktif ? '' : ' <span class="badge b-gray">nonaktif</span>') + '</div><div class="rd">' +
       '<span>Masa minimal ' + esc(a.masa_min_bulan) + ' bulan sejak TMT</span><span>BKD ' + esc(a.bkd_min_semester) + ' semester berturut</span><span>' + (a.pendidikan_min ? 'Wajib ' + esc(a.pendidikan_min) : 'Tanpa syarat pendidikan khusus') + '</span>' +
-        (function () { const k = []; const b = v => v === true || String(v).toUpperCase() === 'TRUE';
-          if (b(a.syarat_skp)) k.push('SKP min. Baik 2 tahun'); if (String(a.syarat_ak_penelitian || '').trim()) k.push('AK penelitian ≥ ' + esc(a.syarat_ak_penelitian) + '%');
-          if (b(a.syarat_publikasi)) k.push('1 publikasi SINTA 4+/Scopus Q4+'); if (b(a.syarat_elkite)) k.push('Elkite Tri Dharma');
-          return k.length ? '<span style="color:var(--blue-tx, var(--navy));font-weight:600">Khusus: ' + k.join(' · ') + '</span>' : ''; })() + '</div></div>').join('') + '</div>' +
+        (function () { const k = ringkasKhusus(a); return k.length ? '<span style="color:var(--navy);font-weight:600">Khusus: ' + esc(k.join(' · ')) + '</span>' : ''; })() + '</div></div>').join('') + '</div>' +
       '<div class="small muted" style="margin-top:10px">Syarat tambahan: NUPTK dan jeda ' + esc(App.boot.cfg.JEDA_TB_BULAN) + ' bulan setelah tugas belajar selesai. GB dikecualikan.</div></div>';
 
     const tc = {}; dasarTrans.forEach(d => { const t = trans(d); if (t) tc[t] = (tc[t] || 0) + 1; });
@@ -979,6 +999,160 @@
   // ============================================================
   // PERINGATAN PENSIUN
   // ============================================================
+  // ============================================================
+  // REKAP USIA DOSEN
+  // ============================================================
+  const KELOMPOK_USIA = {
+    '10': [[0, 29, '< 30'], [30, 39, '30–39'], [40, 49, '40–49'], [50, 59, '50–59'], [60, 64, '60–64'], [65, 200, '≥ 65']],
+    '5': [[0, 29, '< 30'], [30, 34, '30–34'], [35, 39, '35–39'], [40, 44, '40–44'], [45, 49, '45–49'], [50, 54, '50–54'], [55, 59, '55–59'], [60, 64, '60–64'], [65, 69, '65–69'], [70, 200, '≥ 70']]
+  };
+  function usiaDosen(d) { const u = d.pensiun ? d.pensiun.usia_tahun : null; return u === null || u === undefined || u === '' ? null : +u; }
+  const angka1 = n => n === null || n === undefined ? '—' : String(Math.round(n * 10) / 10).replace('.', ',');
+
+  /** Statistik usia untuk daftar dosen: kelompok, rata-rata, median, rentang, per jabatan & prodi, proyeksi pensiun 5 tahun. */
+  function statUsia(list, mode) {
+    const ada = list.filter(d => usiaDosen(d) !== null);
+    const us = ada.map(usiaDosen).sort((a, b) => a - b);
+    const rata = l => { const v = l.map(usiaDosen).filter(x => x !== null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+    const median = us.length ? (us.length % 2 ? us[(us.length - 1) / 2] : (us[us.length / 2 - 1] + us[us.length / 2]) / 2) : null;
+    const kelompok = KELOMPOK_USIA[mode || '10'].map(k => ({ label: k[2], min: k[0], max: k[1], dosen: ada.filter(d => usiaDosen(d) >= k[0] && usiaDosen(d) <= k[1]) }));
+    const prodi = [...new Set(list.map(d => d.prodi || 'Belum ditetapkan'))].sort((a, b) => a.localeCompare(b));
+    const thn = +App.hariIni().slice(0, 4);
+    const hari = App.hariIni();
+    // tahun berjalan dihitung dari hari ini; yang sudah lewat dipisah (lewat)
+    const proyeksi = [0, 1, 2, 3, 4].map(i => ({ tahun: thn + i, dosen: list.filter(d => d.pensiun && d.pensiun.tgl_pensiun && d.pensiun.tgl_pensiun >= hari && +d.pensiun.tgl_pensiun.slice(0, 4) === thn + i) }));
+    const lewat = list.filter(d => d.pensiun && d.pensiun.tgl_pensiun && d.pensiun.tgl_pensiun < App.hariIni());
+    return { total: list.length, ada, tanpa: list.filter(d => usiaDosen(d) === null), rata: rata(ada), rataFn: rata, median, min: us[0], maks: us[us.length - 1], kelompok, prodi, proyeksi, lewat,
+      pensiunDiatur: (App.boot.pensiun_aturan || []).some(a => a.usia_pensiun) };
+  }
+  Pages.statUsia = statUsia; Pages.usiaDosen = usiaDosen; Pages.angka1 = angka1; Pages.JAB_URUT = JAB_URUT;
+
+  const USIA = { jur: '', prodi: '', jab: '', sd: '', mode: '10', pilih: '' };
+  function daftarUsia() {
+    let l = App.dosenAktif().filter(App.dalamLingkup);
+    if (USIA.jur) l = l.filter(d => (d.kelompok_bidang || '') === USIA.jur);
+    if (USIA.prodi) l = l.filter(d => (d.prodi || 'Belum ditetapkan') === USIA.prodi);
+    if (USIA.jab) l = l.filter(d => d.status.jabatan === USIA.jab);
+    if (USIA.sd) l = l.filter(d => (d.status_dosen || 'Aktif') === USIA.sd);
+    return l;
+  }
+  Pages.filterUsia = () => Object.assign({}, USIA);
+
+  Pages.usia = async function () {
+    V().innerHTML = UI.skeleton(3);
+    await App.muatDosen();
+    if (!App.isCurrent()) return;
+    renderUsia();
+  };
+
+  function renderUsia() {
+    const dasar = App.dosenAktif().filter(App.dalamLingkup);
+    const list = daftarUsia();
+    const S = statUsia(list, USIA.mode);
+    const maksK = Math.max(1, ...S.kelompok.map(k => k.dosen.length));
+    const pct = n => S.ada.length ? Math.round(n * 1000 / S.ada.length) / 10 : 0;
+    const lingkup = App.lihatSemua() ? 'FTSP' : App.prodiPimpinan().join(', ');
+
+    let h = head('Laporan', 'Rekap Usia Dosen', 'Sebaran usia dosen aktif ' + esc(lingkup) + ' per ' + fmtTgl(App.hariIni(), true) + '. Usia dihitung dari tanggal lahir; dosen tanpa tanggal lahir ditampilkan terpisah.',
+      '<button class="btn btn-outline" data-u-xls ' + (list.length ? '' : 'disabled') + '>' + ic('download', 16) + 'Unduh Excel</button><button class="btn btn-outline" data-u-word>' + ic('file', 16) + 'Word</button><button class="btn btn-primary" data-u-pdf>' + ic('printer', 16) + 'Cetak / PDF</button>');
+
+    const jurList = [...new Set(dasar.map(d => d.kelompok_bidang).filter(Boolean))].sort();
+    if (jurList.length > 1) h += '<div class="jur-tabs">' + [['', 'Semua Jurusan', dasar.length]].concat(jurList.map(j => [j, j, dasar.filter(d => d.kelompok_bidang === j).length]))
+      .map(j => '<button class="' + (USIA.jur === j[0] ? 'on' : '') + '" data-u-jur="' + esc(j[0]) + '">' + ic(j[0] ? 'building' : 'grid', 16) + esc(j[1]) + '<span class="n">' + j[2] + '</span></button>').join('') + '</div>';
+    const prodiOpsi = [...new Set(dasar.filter(d => !USIA.jur || d.kelompok_bidang === USIA.jur).map(d => d.prodi || 'Belum ditetapkan'))].sort();
+    h += '<div class="toolbar">' +
+      (prodiOpsi.length > 1 ? '<select class="input" id="u-prodi" aria-label="Prodi"><option value="">Semua prodi</option>' + prodiOpsi.map(p => '<option ' + (USIA.prodi === p ? 'selected' : '') + '>' + esc(p) + '</option>').join('') + '</select>' : '') +
+      '<select class="input" id="u-jab" aria-label="Jabatan"><option value="">Semua jabatan</option>' + JAB_URUT.map(j => '<option value="' + j + '" ' + (USIA.jab === j ? 'selected' : '') + '>' + UI.jab(j) + '</option>').join('') + '</select>' +
+      '<select class="input" id="u-sd" aria-label="Status dosen"><option value="">Semua status dosen</option>' + STATUS_DOSEN.map(x => '<option ' + (USIA.sd === x ? 'selected' : '') + '>' + x + '</option>').join('') + '</select>' +
+      '<div class="seg" role="group" aria-label="Rentang kelompok"><button class="' + (USIA.mode === '10' ? 'on' : '') + '" data-u-mode="10">Per 10 tahun</button><button class="' + (USIA.mode === '5' ? 'on' : '') + '" data-u-mode="5">Per 5 tahun</button></div></div>';
+
+    const dekat = S.proyeksi.reduce((a, p) => a + p.dosen.length, 0);
+    const thnAkhir = S.proyeksi[S.proyeksi.length - 1].tahun;
+    h += '<div class="grid g-4 mb">' +
+      '<div class="card kpi"><div class="k-top"><div class="k-label">Dosen dengan data usia</div><div class="k-ico">' + ic('users', 18) + '</div></div><div class="k-val tabular">' + S.ada.length + '<small>/ ' + S.total + '</small></div><div class="k-desc">' + (S.tanpa.length ? S.tanpa.length + ' dosen belum ada tanggal lahir' : 'Semua dosen memiliki tanggal lahir') + '</div></div>' +
+      '<div class="card kpi"><div class="k-top"><div class="k-label">Rata-rata usia</div><div class="k-ico">' + ic('bars', 18) + '</div></div><div class="k-val tabular">' + angka1(S.rata) + '<small>tahun</small></div><div class="k-desc">Median ' + angka1(S.median) + ' tahun</div></div>' +
+      '<div class="card kpi"><div class="k-top"><div class="k-label">Rentang usia</div><div class="k-ico">' + ic('trend', 18) + '</div></div><div class="k-val tabular">' + (S.ada.length ? S.min + '–' + S.maks : '—') + '<small>tahun</small></div><div class="k-desc">Termuda – tertua</div></div>' +
+      '<div class="card kpi short"><div class="k-top"><div class="k-label">Pensiun hingga ' + thnAkhir + '</div><div class="k-ico">' + ic('hourglass', 18) + '</div></div><div class="k-val tabular">' + (S.pensiunDiatur ? dekat : '—') + '<small>dosen</small></div><div class="k-desc">' + (S.pensiunDiatur ? 'Mencapai batas usia pensiun ' + S.proyeksi[0].tahun + '–' + thnAkhir + (S.lewat.length ? ' · ' + S.lewat.length + ' sudah lewat batas' : '') : 'Usia pensiun belum diatur admin') + '</div></div></div>';
+
+    // Sebaran
+    h += '<div class="grid g-2 g-stack mb" style="align-items:start"><div class="card"><div class="card-head"><div><h3>' + ic('bars', 18) + 'Sebaran kelompok usia</h3><div class="sub">Klik kelompok untuk melihat daftar dosen</div></div></div><div class="card-body">' +
+      (S.ada.length ? S.kelompok.map(k => '<div class="ubar ' + (USIA.pilih === k.label ? 'on' : '') + '" data-u-k="' + esc(k.label) + '" role="button" tabindex="0"><div class="ul">' + esc(k.label) + '</div><div class="ut"><div class="uf ' + (k.min >= 65 ? 'merah' : k.min >= 60 ? 'jingga' : '') + '" style="width:' + (k.dosen.length * 100 / maksK) + '%"></div></div><div class="un"><b>' + k.dosen.length + '</b> <span class="muted">' + String(pct(k.dosen.length)).replace('.', ',') + '%</span></div></div>').join('') +
+        (S.tanpa.length ? '<div class="ubar ' + (USIA.pilih === '__tanpa' ? 'on' : '') + '" data-u-k="__tanpa" role="button" tabindex="0"><div class="ul muted">Tanpa data</div><div class="ut"><div class="uf abu" style="width:' + (S.tanpa.length * 100 / Math.max(maksK, S.tanpa.length)) + '%"></div></div><div class="un"><b>' + S.tanpa.length + '</b> <span class="muted">dosen</span></div></div>' : '')
+        : UI.empty('bars', 'Belum ada data usia', 'Tanggal lahir dosen belum diisi.')) + '</div></div>';
+
+    // Proyeksi pensiun
+    const maksP = Math.max(1, ...S.proyeksi.map(p => p.dosen.length));
+    h += '<div class="card"><div class="card-head"><div><h3>' + ic('hourglass', 18) + 'Proyeksi mencapai batas usia pensiun</h3><div class="sub">Jumlah dosen per tahun, sesuai usia pensiun per jabatan</div></div></div><div class="card-body">' +
+      (S.pensiunDiatur ? S.proyeksi.map((p, i) => '<div class="ubar static"><div class="ul">' + p.tahun + (i === 0 ? '<span class="small muted" style="display:block;font-weight:500">sisa tahun ini</span>' : '') + '</div><div class="ut"><div class="uf jingga" style="width:' + (p.dosen.length * 100 / maksP) + '%"></div></div><div class="un"><b>' + p.dosen.length + '</b> <span class="muted">dosen</span></div></div>').join('') +
+        (S.lewat.length ? '<p class="small" style="color:var(--inc-tx);margin:10px 0 0">' + ic('alert', 13) + ' ' + S.lewat.length + ' dosen aktif sudah melewati batas usia pensiun.</p>' : '') +
+        '<p class="small muted" style="margin:10px 0 0">Daftar nama ada di <a href="#/pensiun">Peringatan Pensiun</a>.</p>'
+        : '<div class="muted">Usia pensiun per jabatan belum diatur.' + (App.isAdmin() ? ' <a href="#/pengaturan?tab=pensiun">Atur sekarang →</a>' : '') + '</div>') + '</div></div></div>';
+
+    // Tabel silang
+    const sel = (l, f) => l.filter(f).length;
+    const jabAda = JAB_URUT.filter(j => list.some(d => d.status.jabatan === j));
+    h += '<div class="card mb"><div class="card-head"><div><h3>' + ic('award', 18) + 'Kelompok usia × jabatan akademik</h3></div></div><div class="table-wrap"><table class="tbl"><thead><tr><th>Kelompok usia</th>' + jabAda.map(j => '<th class="num">' + j + '</th>').join('') + '<th class="num">Jumlah</th></tr></thead><tbody>' +
+      S.kelompok.map(k => '<tr><td><b>' + esc(k.label) + '</b></td>' + jabAda.map(j => '<td class="num">' + (sel(k.dosen, d => d.status.jabatan === j) || '<span class="muted">0</span>') + '</td>').join('') + '<td class="num"><b>' + k.dosen.length + '</b></td></tr>').join('') +
+      '<tr class="tot"><td>Jumlah (dengan data usia)</td>' + jabAda.map(j => '<td class="num">' + sel(S.ada, d => d.status.jabatan === j) + '</td>').join('') + '<td class="num">' + S.ada.length + '</td></tr>' +
+      '<tr class="tot"><td>Rata-rata usia (tahun)</td>' + jabAda.map(j => '<td class="num">' + angka1(S.rataFn(S.ada.filter(d => d.status.jabatan === j))) + '</td>').join('') + '<td class="num">' + angka1(S.rata) + '</td></tr></tbody></table></div></div>';
+    if (S.prodi.length > 1) {
+      h += '<div class="card mb"><div class="card-head"><div><h3>' + ic('building', 18) + 'Kelompok usia × program studi (homebase)</h3></div></div><div class="table-wrap"><table class="tbl"><thead><tr><th>Kelompok usia</th>' + S.prodi.map(p => '<th class="num">' + esc(p) + '</th>').join('') + '<th class="num">Jumlah</th></tr></thead><tbody>' +
+        S.kelompok.map(k => '<tr><td><b>' + esc(k.label) + '</b></td>' + S.prodi.map(p => '<td class="num">' + (sel(k.dosen, d => (d.prodi || 'Belum ditetapkan') === p) || '<span class="muted">0</span>') + '</td>').join('') + '<td class="num"><b>' + k.dosen.length + '</b></td></tr>').join('') +
+        '<tr class="tot"><td>Jumlah (dengan data usia)</td>' + S.prodi.map(p => '<td class="num">' + sel(S.ada, d => (d.prodi || 'Belum ditetapkan') === p) + '</td>').join('') + '<td class="num">' + S.ada.length + '</td></tr>' +
+        '<tr class="tot"><td>Rata-rata usia (tahun)</td>' + S.prodi.map(p => '<td class="num">' + angka1(S.rataFn(S.ada.filter(d => (d.prodi || 'Belum ditetapkan') === p))) + '</td>').join('') + '<td class="num">' + angka1(S.rata) + '</td></tr></tbody></table></div></div>';
+    }
+
+    // Daftar dosen kelompok terpilih
+    const pilihK = USIA.pilih === '__tanpa' ? { label: 'Tanpa tanggal lahir', dosen: S.tanpa } : S.kelompok.find(k => k.label === USIA.pilih);
+    h += '<div class="card" id="u-daftar"><div class="card-head"><div><h3>' + ic('list', 18) + (pilihK ? 'Dosen kelompok usia ' + esc(pilihK.label) + ' (' + pilihK.dosen.length + ')' : 'Daftar dosen per kelompok') + '</h3>' +
+      (pilihK ? '' : '<div class="sub">Klik salah satu kelompok usia di atas</div>') + '</div>' + (pilihK ? '<button class="btn btn-ghost btn-sm" data-u-tutup>' + ic('x', 14) + 'Tutup</button>' : '') + '</div>' +
+      (pilihK ? '<div class="table-wrap"><table class="tbl"><thead><tr><th>Nama</th><th>Homebase</th><th>Jabatan akademik</th><th class="num">Usia</th><th>Tanggal lahir</th><th>Batas usia pensiun</th></tr></thead><tbody>' +
+        pilihK.dosen.slice().sort((a, b) => (usiaDosen(b) || 0) - (usiaDosen(a) || 0) || a.nama.localeCompare(b.nama)).map(d => '<tr><td><a href="#/dosen/' + esc(d.id_dosen) + '"><b>' + esc(d.nama) + '</b></a></td><td>' + esc(d.prodi || 'Belum ditetapkan') + '</td><td>' + esc(d.status.jabatan_label) + '</td>' +
+          '<td class="num">' + (usiaDosen(d) === null ? '—' : usiaDosen(d) + ' thn') + '</td><td>' + (d.tgl_lahir ? fmtTgl(d.tgl_lahir) : '<span class="muted">Belum diisi</span>') + '</td><td>' + (d.pensiun.tgl_pensiun ? fmtTgl(d.pensiun.tgl_pensiun) : '<span class="muted">—</span>') + '</td></tr>').join('') +
+        '</tbody></table></div>' : '') + '</div>';
+    V().innerHTML = h;
+
+    const ulang = () => renderUsia();
+    V().querySelectorAll('[data-u-jur]').forEach(b => b.onclick = () => { USIA.jur = b.dataset.uJur; USIA.prodi = ''; USIA.pilih = ''; ulang(); });
+    V().querySelectorAll('[data-u-mode]').forEach(b => b.onclick = () => { USIA.mode = b.dataset.uMode; USIA.pilih = ''; ulang(); });
+    [['#u-prodi', 'prodi'], ['#u-jab', 'jab'], ['#u-sd', 'sd']].forEach(x => { const el = V().querySelector(x[0]); if (el) el.onchange = () => { USIA[x[1]] = el.value; USIA.pilih = ''; ulang(); }; });
+    const pilih = el => { USIA.pilih = USIA.pilih === el.dataset.uK ? '' : el.dataset.uK; ulang(); const t = V().querySelector('#u-daftar'); if (t && USIA.pilih) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    V().querySelectorAll('[data-u-k]').forEach(el => { el.onclick = () => pilih(el); el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pilih(el); } }; });
+    const tt = V().querySelector('[data-u-tutup]'); if (tt) tt.onclick = () => { USIA.pilih = ''; ulang(); };
+    V().querySelector('[data-u-pdf]').onclick = async e => { const d = await UI.sibuk(e.currentTarget, () => Cetak.bangun('usia', USIA)); Cetak.cetakPDF(d.html); };
+    V().querySelector('[data-u-word]').onclick = async e => { const d = await UI.sibuk(e.currentTarget, () => Cetak.bangun('usia', USIA)); Cetak.unduhWord(d.html, d.judul + ' ' + App.hariIni()); UI.toast('Dokumen Word diunduh'); };
+    V().querySelector('[data-u-xls]').onclick = e => UI.sibuk(e.currentTarget, () => unduhUsia(list, S)).catch(() => { });
+  }
+
+  async function unduhUsia(list, S) {
+    const admin = App.isAdmin();
+    const jabAda = JAB_URUT.filter(j => list.some(d => d.status.jabatan === j));
+    const pct = n => S.ada.length ? Math.round(n * 1000 / S.ada.length) / 10 : 0;
+    const filt = [USIA.jur, USIA.prodi, USIA.jab ? UI.jab(USIA.jab) : '', USIA.sd].filter(Boolean).join(', ') || 'Semua dosen dalam lingkup';
+    const r1 = [['Rekap Usia Dosen — data per ' + App.hariIni()], ['Filter: ' + filt], [], ['Kelompok usia', 'Jumlah dosen', 'Persentase (%)']]
+      .concat(S.kelompok.map(k => [k.label, k.dosen.length, pct(k.dosen.length)]))
+      .concat([['Jumlah (dengan data usia)', S.ada.length, S.ada.length ? 100 : 0], ['Belum ada tanggal lahir', S.tanpa.length, ''], [],
+        ['Rata-rata usia (tahun)', S.rata === null ? '' : Math.round(S.rata * 10) / 10], ['Median usia (tahun)', S.median === null ? '' : S.median], ['Termuda (tahun)', S.min === undefined ? '' : S.min], ['Tertua (tahun)', S.maks === undefined ? '' : S.maks]]);
+    const r2 = [['Kelompok usia'].concat(jabAda.map(j => UI.jab(j)), ['Jumlah'])]
+      .concat(S.kelompok.map(k => [k.label].concat(jabAda.map(j => k.dosen.filter(d => d.status.jabatan === j).length), [k.dosen.length])))
+      .concat([['Rata-rata usia'].concat(jabAda.map(j => { const v = S.rataFn(S.ada.filter(d => d.status.jabatan === j)); return v === null ? '' : Math.round(v * 10) / 10; }), [S.rata === null ? '' : Math.round(S.rata * 10) / 10])]);
+    const r3 = [['Kelompok usia'].concat(S.prodi, ['Jumlah'])]
+      .concat(S.kelompok.map(k => [k.label].concat(S.prodi.map(p => k.dosen.filter(d => (d.prodi || 'Belum ditetapkan') === p).length), [k.dosen.length])));
+    const r4 = [['Tahun', 'Jumlah dosen mencapai batas usia pensiun', 'Nama']].concat(S.proyeksi.map(p => [p.tahun, p.dosen.length, p.dosen.map(d => d.nama).join('; ')]));
+    const kelOf = d => { const u = usiaDosen(d); if (u === null) return 'Tanpa data'; const k = S.kelompok.find(x => u >= x.min && u <= x.max); return k ? k.label : ''; };
+    const r5 = [['No', 'Nama', 'NIDN', 'Jurusan', 'Homebase', 'Jabatan akademik', 'Status dosen', 'Usia (tahun)', 'Kelompok usia', 'Batas usia pensiun', 'Tanggal capai batas'].concat(admin ? ['Tanggal lahir'] : [])]
+      .concat(list.slice().sort((a, b) => (usiaDosen(b) === null) - (usiaDosen(a) === null) || (usiaDosen(b) || 0) - (usiaDosen(a) || 0)).map((d, i) => [i + 1, d.nama, d.nidn || '', d.kelompok_bidang || '', d.prodi || 'Belum ditetapkan', d.status.jabatan_label, d.status_dosen || 'Aktif',
+        usiaDosen(d) === null ? '' : usiaDosen(d), kelOf(d), d.pensiun.usia_pensiun || '', d.pensiun.tgl_pensiun || ''].concat(admin ? [d.tgl_lahir || ''] : [])));
+    await UI.unduhXLSX('Rekap-Usia-Dosen-' + (USIA.jur ? USIA.jur.replace(/\s+/g, '_') + '-' : '') + App.hariIni() + '.xlsx', [
+      { nama: 'Ringkasan', aoa: r1, lebar: [30, 14, 16], filter: false },
+      { nama: 'Per Jabatan', aoa: r2, lebar: [18].concat(jabAda.map(() => 16), [10]) },
+      { nama: 'Per Prodi', aoa: r3, lebar: [18].concat(S.prodi.map(p => Math.max(14, p.length + 2)), [10]) },
+      { nama: 'Proyeksi Pensiun', aoa: r4, lebar: [8, 22, 80], filter: false },
+      { nama: 'Daftar Dosen', aoa: r5, lebar: [5, 36, 13, 14, 20, 18, 14, 12, 14, 14, 16, 14] }
+    ]);
+    UI.toast('Rekap usia diunduh');
+  }
+
   const PNS = { mode: 'jendela', prodi: '', q: '' };
   Pages.pensiun = async function () {
     V().innerHTML = UI.skeleton();

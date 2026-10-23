@@ -49,6 +49,8 @@
     send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
     arrowR: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
     trend: '<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>',
+    bars: '<path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6" rx="1"/><rect x="12" y="8" width="3" height="10" rx="1"/><rect x="17" y="5" width="3" height="13" rx="1"/>',
+    scale: '<path d="M12 3v18"/><path d="M5 21h14"/><path d="M3 7h18"/><path d="m6 7-3 7a3 3 0 0 0 6 0Z"/><path d="m18 7-3 7a3 3 0 0 0 6 0Z"/>',
     cap: '<path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/>',
     list: '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
     copy: '<rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
@@ -345,13 +347,18 @@
     });
   }
   /** Unduh array-of-arrays sebagai .xlsx (baris pertama = judul kolom). */
+  /** Unduh Excel. Satu sheet: (namaFile, namaSheet, aoa, lebar). Banyak sheet: (namaFile, [{nama, aoa, lebar, filter}]). */
   async function unduhXLSX(namaFile, namaSheet, aoa, lebar) {
     await muatXLSX();
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = (lebar || aoa[0].map(h => Math.max(10, Math.min(45, String(h).length + 4)))).map(w => ({ wch: w }));
-    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(0, aoa.length - 1), c: aoa[0].length - 1 } }) };
-    XLSX.utils.book_append_sheet(wb, ws, namaSheet.slice(0, 31));
+    const daftar = Array.isArray(namaSheet) ? namaSheet : [{ nama: namaSheet, aoa, lebar }];
+    daftar.forEach(sh => {
+      const ws = XLSX.utils.aoa_to_sheet(sh.aoa);
+      const lebarKolom = Math.max(...sh.aoa.map(r => r.length));
+      ws['!cols'] = (sh.lebar || Array.from({ length: lebarKolom }, (_, i) => Math.max(10, Math.min(45, String((sh.aoa[0] || [])[i] || '').length + 4)))).map(w => ({ wch: w }));
+      if (sh.filter !== false && sh.aoa.length > 1) ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: sh.aoa.length - 1, c: sh.aoa[0].length - 1 } }) };
+      XLSX.utils.book_append_sheet(wb, ws, String(sh.nama).slice(0, 31));
+    });
     XLSX.writeFile(wb, namaFile);
   }
 
